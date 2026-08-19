@@ -1,0 +1,1030 @@
+import React, { useRef, useEffect, useState } from 'react';
+import { Company, AnalyticsReport, ProfessionalProfile } from '../types';
+import { 
+  Printer, ArrowLeft, Building2, User, 
+  Calendar, CheckCircle2, AlertTriangle, ShieldCheck, 
+  FileText, Award, Layers, BarChart2, TrendingUp, AlertOctagon, HelpCircle,
+  Download, Info, Loader2, Check
+} from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import { toPng } from 'html-to-image';
+import { 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, 
+  Cell, ReferenceLine, Legend
+} from 'recharts';
+
+interface ExecutiveReportViewProps {
+  company: Company;
+  analytics: AnalyticsReport;
+  profile: ProfessionalProfile;
+  autoPrint?: boolean;
+  onBack: () => void;
+}
+
+export function ExecutiveReportView({ company, analytics, profile, autoPrint, onBack }: ExecutiveReportViewProps) {
+  const printRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<string>('');
+
+  useEffect(() => {
+    if (autoPrint) {
+      const timer = setTimeout(() => {
+        handleDirectPdfDownload();
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint]);
+
+  const printViaHiddenIframe = () => {
+    if (!printRef.current) {
+      window.print();
+      return;
+    }
+    try {
+      let iframe = document.getElementById('print-hidden-iframe') as HTMLIFrameElement | null;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'print-hidden-iframe';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+      }
+      
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) {
+        window.print();
+        return;
+      }
+
+      const headContent = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .map(node => node.outerHTML)
+        .join('\n');
+
+      const cleanCompanyName = (company.tradeName || company.corporateName || 'Empresa').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Laudo_Tecnico_NR01_${cleanCompanyName}</title>
+            ${headContent}
+            <style>
+              @page { size: A4 portrait; margin: 0; }
+              body { background: white !important; padding: 0; margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+              .report-a4-page { page-break-after: always; break-after: page; min-height: 297mm; height: 297mm; box-sizing: border-box; padding: 12mm !important; }
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            </style>
+          </head>
+          <body>
+            ${printRef.current.innerHTML}
+          </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      setTimeout(() => {
+        iframe?.contentWindow?.focus();
+        iframe?.contentWindow?.print();
+      }, 400);
+    } catch (e) {
+      console.warn('Fallback direto para window.print:', e);
+      window.print();
+    }
+  };
+
+  const handleDirectPdfDownload = async () => {
+    if (!printRef.current || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    setPdfProgress('Iniciando...');
+    try {
+      const cleanCompanyName = (company.tradeName || company.corporateName || 'Empresa').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const pageElements = printRef.current.querySelectorAll('.report-a4-page');
+      
+      if (!pageElements || pageElements.length === 0) {
+        printViaHiddenIframe();
+        return;
+      }
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+
+      for (let i = 0; i < pageElements.length; i++) {
+        setPdfProgress(`Processando pág. ${i + 1} de ${pageElements.length}...`);
+        const pageEl = pageElements[i] as HTMLElement;
+        
+        // Render each A4 page individually with high resolution
+        const dataUrl = await toPng(pageEl, {
+          quality: 0.98,
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          cacheBust: true,
+        });
+
+        if (i > 0) {
+          pdf.addPage('a4', 'portrait');
+        }
+
+        pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      }
+
+      setPdfProgress('Salvando arquivo...');
+      pdf.save(`Laudo_Tecnico_NR01_${cleanCompanyName}.pdf`);
+    } catch (error) {
+      console.error('Erro na renderização das páginas do PDF:', error);
+      printViaHiddenIframe();
+    } finally {
+      setIsGeneratingPdf(false);
+      setPdfProgress('');
+    }
+  };
+
+  const getFavBadge = (fav: number) => {
+    if (fav >= 67) {
+      return {
+        label: 'Favorável',
+        badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        color: '#10B981',
+        desc: 'Baixo risco psicossocial (Fator Protetivo)'
+      };
+    } else if (fav >= 40) {
+      return {
+        label: 'Atenção',
+        badge: 'bg-amber-100 text-amber-800 border-amber-300',
+        color: '#F59E0B',
+        desc: 'Risco moderado (Necessita monitoramento e ações preventivas)'
+      };
+    } else {
+      return {
+        label: 'Crítico',
+        badge: 'bg-red-100 text-red-800 border-red-300',
+        color: '#EF4444',
+        desc: 'Risco alto (Intervenção prioritária imediata no PGR)'
+      };
+    }
+  };
+
+  const getBullyingBadge = (rate: number) => {
+    if (rate > 25) {
+      return { label: 'Crítico', badge: 'bg-red-100 text-red-800 border-red-300', color: '#EF4444' };
+    } else if (rate >= 10) {
+      return { label: 'Atenção', badge: 'bg-amber-100 text-amber-800 border-amber-300', color: '#F59E0B' };
+    } else {
+      return { label: 'Favorável', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300', color: '#10B981' };
+    }
+  };
+
+  const getSexualBadge = (rate: number) => {
+    if (rate > 10) {
+      return { label: 'Crítico', badge: 'bg-red-100 text-red-800 border-red-300', color: '#EF4444' };
+    } else if (rate >= 3) {
+      return { label: 'Atenção', badge: 'bg-amber-100 text-amber-800 border-amber-300', color: '#F59E0B' };
+    } else {
+      return { label: 'Favorável', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300', color: '#10B981' };
+    }
+  };
+
+  // Radar Data for the 6 HSE-IT Dimensions
+  const radarData = analytics.dimensionScores.map(d => ({
+    dimension: d.dimensionName,
+    favorabilidade: d.favorabilityIndex,
+    corteFavoravel: 67,
+    fullDimension: d.dimensionName,
+  }));
+
+  // Participants per Sector
+  const participantsData = analytics.departmentScores.map(d => ({
+    name: d.departmentName.length > 14 ? d.departmentName.substring(0, 12) + '...' : d.departmentName,
+    fullName: d.departmentName,
+    participantes: d.respondentsCount,
+    percentual: d.percentageOfTotal,
+    isSmall: d.isSmallSample
+  }));
+
+  // Sector Favorability
+  const sectorFavorabilityData = analytics.departmentScores.map(d => ({
+    name: d.departmentName.length > 14 ? d.departmentName.substring(0, 12) + '...' : d.departmentName,
+    fullName: d.departmentName,
+    favorabilidade: d.favorabilityIndex,
+    corte: 67
+  }));
+
+  // Bullying Data per Sector
+  const bullyingData = analytics.moralHarassmentStats.departmentStats.map(d => ({
+    name: d.departmentName.length > 14 ? d.departmentName.substring(0, 12) + '...' : d.departmentName,
+    fullName: d.departmentName,
+    taxa: d.rate,
+    afetados: d.affectedCount,
+    total: d.totalDept
+  }));
+
+  // Sexual Harassment Data per Sector
+  const sexualData = analytics.sexualHarassmentStats.departmentStats.map(d => ({
+    name: d.departmentName.length > 14 ? d.departmentName.substring(0, 12) + '...' : d.departmentName,
+    fullName: d.departmentName,
+    taxa: d.rate,
+    afetados: d.affectedCount,
+    total: d.totalDept
+  }));
+
+  // Worst Questions Data for Chart
+  const worstQuestionsData = analytics.worstQuestions.map((q, idx) => ({
+    name: `Q${q.questionId}`,
+    fullName: q.text,
+    favorabilidade: q.favorabilityIndex,
+    media: q.averageScore,
+    dimension: q.dimensionName
+  }));
+
+  const globalFav = getFavBadge(analytics.overallFavorability);
+
+  return (
+    <div className="p-4 sm:p-8 space-y-6 animate-in fade-in duration-500 max-w-5xl mx-auto">
+      
+      {/* Top Action Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
+        <button 
+          id="btn-back-to-reports"
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors px-3 py-2 rounded-lg hover:bg-slate-100 cursor-pointer"
+        >
+          <ArrowLeft size={18} /> Voltar aos Relatórios
+        </button>
+
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+          <span className="text-xs font-semibold text-slate-500 hidden md:inline">
+            Formato Padrão A4 • NR-1 / Portaria MTE nº 1.419/2024
+          </span>
+          <button 
+            id="btn-print-save-pdf"
+            onClick={handleDirectPdfDownload}
+            disabled={isGeneratingPdf}
+            title="Salvar e baixar Laudo Técnico em PDF"
+            className="flex items-center justify-center gap-2 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:shadow-md active:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {isGeneratingPdf ? (
+              <>
+                <Loader2 size={17} className="animate-spin" /> {pdfProgress || 'Gerando PDF...'}
+              </>
+            ) : (
+              <>
+                <Printer size={17} /> Imprimir / Salvar em PDF
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* PRINTABLE CONTAINER: 5 EXCLUSIVE A4 PAGES                                */}
+      {/* ========================================================================= */}
+      <div ref={printRef} className="space-y-8 print:space-y-0">
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PAGE 1: IDENTIFICAÇÃO, METADADOS & TAXA DE ADESÃO                         */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="report-a4-page bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-md min-h-[1080px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+          
+          <div className="space-y-6">
+            {/* Document Header */}
+            <div className="border-b-2 border-slate-900 pb-5">
+              <div className="flex justify-between items-center gap-4 mb-3">
+                <div className="flex items-center gap-2 text-[#2D6A4F] font-black text-sm uppercase tracking-widest">
+                  <ShieldCheck size={22} />
+                  <span>{profile.consultancyName}</span>
+                </div>
+                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-3 py-1 rounded-full border border-slate-300">
+                  DOCUMENTO TÉCNICO REGULATÓRIO
+                </span>
+              </div>
+
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
+                ANÁLISE DOS RESULTADOS DO QUESTIONÁRIO DE AVALIAÇÃO DE RISCOS PSICOSSOCIAIS, DE ACORDO COM A NR-1
+              </h1>
+              <p className="text-[11px] font-semibold text-slate-500 mt-1.5 uppercase tracking-wide">
+                Referência Técnica: NR-1 e Portaria MTE nº 1.419/2024 • Instrumento Técnico HSE-IT
+              </p>
+            </div>
+
+            {/* Corporate Metadata Table */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Razão Social</span>
+                <p className="font-bold text-slate-900 text-xs truncate">{analytics.corporateName}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Nome Fantasia</span>
+                <p className="font-bold text-slate-900 text-xs truncate">{analytics.companyName}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">CNPJ</span>
+                <p className="font-mono text-slate-900 font-bold text-xs">{analytics.cnpj}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Atividade Principal</span>
+                <p className="font-medium text-slate-800 text-xs truncate">{analytics.economicActivity}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">CNAE & Grau de Risco</span>
+                <p className="font-medium text-slate-800 text-xs">{analytics.cnae} | <span className="font-bold text-slate-900">Grau {analytics.riskDegree}</span></p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Unidade & Quadro</span>
+                <p className="font-bold text-slate-900 text-xs">{analytics.unit} | {analytics.totalEmployees} Colab.</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Elaboração Técnica</span>
+                <p className="font-bold text-slate-900 text-xs truncate">{profile.name} ({profile.councilRegister})</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Período de Aplicação</span>
+                <p className="font-medium text-slate-800 text-xs">{analytics.applicationPeriod}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-bold uppercase text-[9px] block">Ano de Referência</span>
+                <p className="font-bold text-slate-900 text-xs">{analytics.referenceYear}</p>
+              </div>
+            </div>
+
+            {/* Section 1: Instrumento Técnico */}
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <Layers className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">1. INSTRUMENTO TÉCNICO</h2>
+              </div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
+                <p>
+                  O instrumento técnico utilizado nesta avaliação é o <strong>HSE-IT – Health and Safety Executive – Indicator Tool</strong>, adaptado e validado para a população brasileira, constituído para subsidiar o <strong>Gerenciamento de Riscos Ocupacionais (GRO)</strong> e o <strong>Programa de Gerenciamento de Riscos (PGR)</strong>, consoante as disposições da <strong>Norma Regulamentadora nº 01 (NR-01)</strong> e da <strong>Portaria MTE nº 1.419/2024</strong>.
+                </p>
+                <p>
+                  A metodologia analisa fatores de risco psicossocial no trabalho, avaliando demandas operacionais, controle de ritmo, clareza de papéis, suporte de liderança, relacionamentos interpessoais e prevenção a condutas abusivas.
+                </p>
+              </div>
+            </section>
+
+            {/* Section 2: Número de Funcionários e Adesão */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <UsersIcon className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">2. NÚMERO DE FUNCIONÁRIOS E TAXA DE RESPOSTA</h2>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Total de Colaboradores</span>
+                  <span className="text-2xl font-black text-slate-900 mt-0.5 block">{analytics.totalEmployees}</span>
+                  <span className="text-[10px] text-slate-500">Quadro ativo</span>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                  <span className="text-[10px] text-emerald-800 font-bold uppercase block">Respondentes Efetivos</span>
+                  <span className="text-2xl font-black text-emerald-900 mt-0.5 block">{analytics.evaluatedEmployees}</span>
+                  <span className="text-[10px] text-emerald-700 font-semibold">{analytics.adherenceRate}% de adesão</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Não Respondentes</span>
+                  <span className="text-2xl font-black text-slate-700 mt-0.5 block">{analytics.unansweredEmployees}</span>
+                  <span className="text-[10px] text-slate-500 font-semibold">{analytics.unansweredRate}% (férias/afast.)</span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-600 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                Nota de Validação Amostral: A participação de {analytics.evaluatedEmployees} colaboradores representa uma adesão de {analytics.adherenceRate}%, conferindo alta representatividade estatística e validade aos resultados apurados para fins de auditoria do MTE.
+              </p>
+            </section>
+          </div>
+
+          {/* Page 1 Footer */}
+          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+            <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
+            <span className="font-bold text-slate-600">Página 1 de 5</span>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PAGE 2: DISTRIBUIÇÃO SETORIAL & GRÁFICOS DE FAVORABILIDADE                */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="report-a4-page bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-md min-h-[1080px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+          
+          <div className="space-y-5">
+            {/* Page Header Stamp */}
+            <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
+              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
+            </div>
+
+            {/* Section 3: Participantes por Setor + Gráfico 1 */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <BarChart2 className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">3. PARTICIPANTES POR SETOR / ÁREA</h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                {/* Table */}
+                <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[9px]">
+                      <tr>
+                        <th className="p-2 border-b border-slate-200">Setor</th>
+                        <th className="p-2 border-b border-slate-200 text-center">Partic.</th>
+                        <th className="p-2 border-b border-slate-200 text-center">% Total</th>
+                        <th className="p-2 border-b border-slate-200 text-center">Condição</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {analytics.departmentScores.map(dept => (
+                        <tr key={dept.departmentId} className="hover:bg-slate-50">
+                          <td className="p-2 font-bold text-slate-900 truncate max-w-[120px]">{dept.departmentName}</td>
+                          <td className="p-2 text-center font-mono font-semibold">{dept.respondentsCount}</td>
+                          <td className="p-2 text-center font-mono">{dept.percentageOfTotal}%</td>
+                          <td className="p-2 text-center">
+                            {dept.isSmallSample ? (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">N&lt;12</span>
+                            ) : (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Represent.</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Chart 1: Participantes por Setor */}
+                <div className="md:col-span-6 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1">Gráfico 1: Participantes por Setor</span>
+                  <div className="h-44 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={participantsData} layout="vertical" margin={{ top: 0, right: 20, left: -5, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
+                        <XAxis type="number" tick={{ fontSize: 9 }} />
+                        <YAxis dataKey="name" type="category" width={85} tick={{ fontSize: 9, fill: '#334155' }} />
+                        <Tooltip 
+                          formatter={(val: number) => [`${val} colab.`, 'Participantes']}
+                          labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
+                        />
+                        <Bar dataKey="participantes" fill="#2D6A4F" radius={[0, 3, 3, 0]}>
+                          {participantsData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.isSmall ? '#F59E0B' : '#2D6A4F'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Section 4: Índice de Favorabilidade & Gráficos 2 e 3 */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <TrendingUp className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">4. ÍNDICE DE FAVORABILIDADE (0 a 100)</h2>
+              </div>
+
+              {/* Global Score Card */}
+              <div className="p-3.5 rounded-xl border border-slate-300 bg-slate-50 flex items-center justify-between gap-4">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Índice Global de Favorabilidade da Empresa</span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-3xl font-black text-slate-900">{analytics.overallFavorability}</span>
+                    <span className="text-slate-400 font-bold text-xs">/ 100 pts</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${globalFav.badge}`}>
+                      {globalFav.label}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5">{globalFav.desc}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-500 block">Média Likert</span>
+                  <span className="text-base font-black text-slate-800">{analytics.overallScore.toFixed(2)} / 4.00</span>
+                </div>
+              </div>
+
+              {/* Charts Row: Radar + Sector Favorability */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Radar Chart */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Gráfico 2: Radar das 6 Dimensões HSE-IT
+                  </span>
+                  <div className="h-52 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
+                        <PolarGrid stroke="#CBD5E1" />
+                        <PolarAngleAxis dataKey="dimension" tick={{ fill: '#334155', fontSize: 9, fontWeight: 700 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8 }} />
+                        <Tooltip formatter={(val: number) => [`${val} pts`, 'Favorabilidade']} />
+                        <Radar name="Empresa" dataKey="favorabilidade" stroke="#2D6A4F" fill="#2D6A4F" fillOpacity={0.4} />
+                        <Radar name="Corte (67+)" dataKey="corteFavoravel" stroke="#F59E0B" strokeDasharray="3 3" fill="transparent" />
+                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '4px' }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Sector Favorability Bars */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Gráfico 3: Favorabilidade por Setor
+                  </span>
+                  <div className="h-52 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={sectorFavorabilityData} margin={{ top: 5, right: 10, left: -15, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" tick={{ fontSize: 8, fill: '#334155' }} />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
+                        <Tooltip 
+                          formatter={(val: number) => [`${val} pts`, 'Favorabilidade']}
+                          labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
+                        />
+                        <ReferenceLine y={67} stroke="#10B981" strokeDasharray="3 3" />
+                        <Bar dataKey="favorabilidade" radius={[3, 3, 0, 0]}>
+                          {sectorFavorabilityData.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={entry.favorabilidade >= 67 ? '#10B981' : entry.favorabilidade >= 40 ? '#F59E0B' : '#EF4444'} 
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Page 2 Footer */}
+          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+            <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
+            <span className="font-bold text-slate-600">Página 2 de 5</span>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PAGE 3: MATRIZ DE DIMENSÕES & SÍNTESE METODOLÓGICA                         */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="report-a4-page bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-md min-h-[1080px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+          
+          <div className="space-y-5">
+            {/* Page Header Stamp */}
+            <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
+              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
+            </div>
+
+            {/* Matrix Table */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <Layers className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">
+                  MATRIZ DE FAVORABILIDADE: DIMENSÕES HSE-IT x SETORES
+                </h2>
+              </div>
+              
+              <div className="overflow-hidden border border-slate-200 rounded-xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-900 text-white font-bold uppercase text-[9px]">
+                    <tr>
+                      <th className="p-2.5">Dimensão HSE-IT</th>
+                      <th className="p-2.5 text-center bg-slate-800">Empresa Geral</th>
+                      {analytics.departmentScores.map(dept => (
+                        <th key={dept.departmentId} className="p-2.5 text-center border-l border-slate-800">
+                          {dept.departmentName}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {analytics.dimensionScores.map(dim => (
+                      <tr key={dim.dimensionId} className="hover:bg-slate-50">
+                        <td className="p-2.5 font-bold text-slate-900 text-xs">{dim.dimensionName}</td>
+                        <td className="p-2.5 text-center bg-slate-50 font-bold">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] border ${getFavBadge(dim.favorabilityIndex).badge}`}>
+                            {dim.favorabilityIndex}
+                          </span>
+                        </td>
+                        {analytics.departmentScores.map(dept => {
+                          const deptDim = dept.dimensionScores.find(d => d.dimensionId === dim.dimensionId);
+                          const fav = deptDim ? deptDim.favorabilityIndex : 50;
+                          const badge = getFavBadge(fav);
+                          return (
+                            <td key={dept.departmentId} className="p-2.5 text-center border-l border-slate-200">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${badge.badge}`}>
+                                {fav}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    {/* Media Geral Row */}
+                    <tr className="bg-slate-100 font-black">
+                      <td className="p-2.5 text-slate-900 uppercase text-xs">Média Consolidada</td>
+                      <td className="p-2.5 text-center bg-slate-200">
+                        <span className={`inline-block px-2.5 py-0.5 rounded text-xs border ${globalFav.badge}`}>
+                          {analytics.overallFavorability}
+                        </span>
+                      </td>
+                      {analytics.departmentScores.map(dept => {
+                        const badge = getFavBadge(dept.favorabilityIndex);
+                        return (
+                          <td key={dept.departmentId} className="p-2.5 text-center border-l border-slate-300">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] border ${badge.badge}`}>
+                              {dept.favorabilityIndex}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Detailed Synthesis Text */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-2">
+              <h3 className="font-bold text-slate-900 text-sm">Síntese dos Resultados por Dimensão Psicométrica:</h3>
+              <ul className="list-disc pl-5 space-y-1.5 text-xs">
+                {analytics.dimensionScores.map(dim => {
+                  const badge = getFavBadge(dim.favorabilityIndex);
+                  let desc = '';
+                  if (dim.dimensionId === 'dim-org') {
+                    desc = dim.favorabilityIndex >= 67 
+                      ? 'Conformidade geral satisfatória, clareza de atribuições e boa adequação dos recursos operacionais.'
+                      : 'Indica necessidade de readequação de prazos, cargas de trabalho e fluxo de instruções operacionais.';
+                  } else if (dim.dimensionId === 'dim-aut') {
+                    desc = dim.favorabilityIndex >= 67
+                      ? 'Colaboradores expressam autonomia satisfatória na condução e no ritmo das suas entregas.'
+                      : 'Setores reportam rigidez na cadência de trabalho e demanda por maior participação nas melhorias.';
+                  } else if (dim.dimensionId === 'dim-lid') {
+                    desc = dim.favorabilityIndex >= 67
+                      ? 'Boa percepção de suporte hierárquico, equidade e clareza nas diretrizes da liderança.'
+                      : 'Aponta necessidade de estruturação de rotinas de feedback construtivo e valorização profissional.';
+                  } else if (dim.dimensionId === 'dim-rel') {
+                    desc = dim.favorabilityIndex >= 67
+                      ? 'Clima positivo de colaboração mútua, respeito interpessoal e suporte entre os pares.'
+                      : 'Aponta ruídos no relacionamento interpessoal ou cooperação intersetorial a serem mediados.';
+                  } else if (dim.dimensionId === 'dim-sau') {
+                    desc = dim.favorabilityIndex >= 67
+                      ? 'Equilíbrio psicossocial favorável com boa capacidade de recuperação e gestão do estresse.'
+                      : 'Pontos de sobrecarga e fadiga pontuais demandam pausas estruturadas e suporte ao bem-estar.';
+                  } else {
+                    desc = dim.favorabilityIndex >= 67
+                      ? 'Ambiente de trabalho com estabilidade geral e bom nível de segurança psicológica.'
+                      : 'Requer fortalecimento dos canais institucionais de relato e prevenção a desvios éticos.';
+                  }
+
+                  return (
+                    <li key={dim.dimensionId}>
+                      <strong>{dim.dimensionName} ({dim.favorabilityIndex} pts - {badge.label}):</strong> {desc}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+
+          {/* Page 3 Footer */}
+          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+            <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
+            <span className="font-bold text-slate-600">Página 3 de 5</span>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PAGE 4: ESTABILIDADE, ASSÉDIO MORAL E ASSÉDIO SEXUAL                      */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="report-a4-page bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-md min-h-[1080px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+          
+          <div className="space-y-5">
+            {/* Page Header Stamp */}
+            <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
+              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
+            </div>
+
+            {/* Section 5: Indicadores Críticos de Conduta */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <AlertOctagon className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-base font-black text-slate-900">5. INDICADORES CRÍTICOS: ESTABILIDADE & ASSÉDIO MORAL</h2>
+              </div>
+
+              {/* 5.1 Estabilidade */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex justify-between items-center gap-4">
+                <div>
+                  <span className="font-bold text-slate-900 block text-xs">5.1 Segurança e Estabilidade no Emprego ({analytics.stabilityStats.overallFavorability} pts)</span>
+                  <p className="text-slate-600 text-[11px] mt-0.5">{analytics.stabilityStats.interpretiveNotes}</p>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[10px] border shrink-0 ${getFavBadge(analytics.stabilityStats.overallFavorability || 0).badge}`}>
+                  {getFavBadge(analytics.stabilityStats.overallFavorability || 0).label}
+                </span>
+              </div>
+
+              {/* 5.2 Assédio Moral */}
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-900">5.2 Assédio Moral no Trabalho</h3>
+                  <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[10px] border ${getBullyingBadge(analytics.moralHarassmentStats.overallRate).badge}`}>
+                    Geral: {getBullyingBadge(analytics.moralHarassmentStats.overallRate).label} ({analytics.moralHarassmentStats.overallRate}%)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                  <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-100 font-bold uppercase text-[9px] text-slate-700">
+                        <tr>
+                          <th className="p-2 border-b border-slate-200">Setor</th>
+                          <th className="p-2 border-b border-slate-200 text-center">Taxa</th>
+                          <th className="p-2 border-b border-slate-200 text-center">Afetados</th>
+                          <th className="p-2 border-b border-slate-200 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {analytics.moralHarassmentStats.departmentStats.map(d => {
+                          const badge = getBullyingBadge(d.rate);
+                          return (
+                            <tr key={d.departmentId} className="hover:bg-slate-50">
+                              <td className="p-2 font-bold text-slate-900 text-xs truncate max-w-[120px]">{d.departmentName}</td>
+                              <td className="p-2 text-center font-mono font-bold text-xs">{d.rate}%</td>
+                              <td className="p-2 text-center font-mono text-[11px]">{d.affectedCount}/{d.totalDept}</td>
+                              <td className="p-2 text-center">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${badge.badge}`}>
+                                  {badge.label}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="md:col-span-6 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-700 block mb-1">Gráfico 4: Taxa de Assédio Moral por Setor (%)</span>
+                    <div className="h-36 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={bullyingData} layout="vertical" margin={{ top: 0, right: 20, left: -5, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
+                          <XAxis type="number" domain={[0, 40]} tick={{ fontSize: 9 }} unit="%" />
+                          <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 9, fill: '#334155' }} />
+                          <Tooltip formatter={(val: number) => [`${val}%`, 'Taxa']} />
+                          <ReferenceLine x={10} stroke="#F59E0B" strokeDasharray="3 3" />
+                          <Bar dataKey="taxa" radius={[0, 3, 3, 0]}>
+                            {bullyingData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.taxa > 25 ? '#EF4444' : entry.taxa >= 10 ? '#F59E0B' : '#10B981'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Section 6: Assédio Sexual */}
+            <section className="space-y-3 pt-2">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="text-[#2D6A4F]" size={18} />
+                  <h2 className="text-base font-black text-slate-900">6. ASSÉDIO SEXUAL (LEI Nº 14.457/2022)</h2>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[10px] border ${getSexualBadge(analytics.sexualHarassmentStats.overallRate).badge}`}>
+                  Geral: {getSexualBadge(analytics.sexualHarassmentStats.overallRate).label} ({analytics.sexualHarassmentStats.overallRate}%)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-100 font-bold uppercase text-[9px] text-slate-700">
+                      <tr>
+                        <th className="p-2 border-b border-slate-200">Setor</th>
+                        <th className="p-2 border-b border-slate-200 text-center">Taxa</th>
+                        <th className="p-2 border-b border-slate-200 text-center">Afetados</th>
+                        <th className="p-2 border-b border-slate-200 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {analytics.sexualHarassmentStats.departmentStats.map(d => {
+                        const badge = getSexualBadge(d.rate);
+                        return (
+                          <tr key={d.departmentId} className="hover:bg-slate-50">
+                            <td className="p-2 font-bold text-slate-900 text-xs truncate max-w-[120px]">{d.departmentName}</td>
+                            <td className="p-2 text-center font-mono font-bold text-xs">{d.rate}%</td>
+                            <td className="p-2 text-center font-mono text-[11px]">{d.affectedCount}/{d.totalDept}</td>
+                            <td className="p-2 text-center">
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${badge.badge}`}>
+                                {badge.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="md:col-span-6 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-700 block mb-1">Gráfico 5: Indicador de Assédio Sexual por Setor (%)</span>
+                  <div className="h-36 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={sexualData} layout="vertical" margin={{ top: 0, right: 20, left: -5, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
+                        <XAxis type="number" domain={[0, 15]} tick={{ fontSize: 9 }} unit="%" />
+                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 9, fill: '#334155' }} />
+                        <Tooltip formatter={(val: number) => [`${val}%`, 'Taxa']} />
+                        <ReferenceLine x={3} stroke="#F59E0B" strokeDasharray="3 3" />
+                        <Bar dataKey="taxa" radius={[0, 3, 3, 0]}>
+                          {sexualData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.taxa > 10 ? '#EF4444' : entry.taxa >= 3 ? '#F59E0B' : '#10B981'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-red-50 rounded-lg border border-red-200 text-xs text-red-900 leading-snug">
+                <strong>Diretriz Legal de Prevenção (NR-05 / CIPA):</strong> Manutenção obrigatória de Canal de Denúncias anônimo, código de conduta atualizado e treinamentos anuais sobre prevenção ao assédio e violência no ambiente de trabalho.
+              </div>
+            </section>
+          </div>
+
+          {/* Page 4 Footer */}
+          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+            <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
+            <span className="font-bold text-slate-600">Página 4 de 5</span>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------------- */}
+        {/* PAGE 5: ITENS CRÍTICOS, PLANO DE AÇÃO 5W2H & ASSINATURAS                   */}
+        {/* ------------------------------------------------------------------------- */}
+        <div className="report-a4-page bg-white p-8 sm:p-10 rounded-2xl border border-slate-200 shadow-md min-h-[1080px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+          
+          <div className="space-y-4">
+            {/* Page Header Stamp */}
+            <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
+              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
+            </div>
+
+            {/* Section 7: Perguntas Críticas */}
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <HelpCircle className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-sm font-black text-slate-900">7. PERGUNTAS COM PIOR AVALIAÇÃO (RANKING DE ATENÇÃO)</h2>
+              </div>
+
+              <div className="overflow-hidden border border-slate-200 rounded-xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-100 font-bold uppercase text-[9px] text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-200">Item / Pergunta Avaliada</th>
+                      <th className="p-2.5 border-b border-slate-200">Dimensão</th>
+                      <th className="p-2.5 border-b border-slate-200 text-center">Média Likert</th>
+                      <th className="p-2.5 border-b border-slate-200 text-center">Favorabilidade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {analytics.worstQuestions.slice(0, 5).map(q => {
+                      const badge = getFavBadge(q.favorabilityIndex);
+                      return (
+                        <tr key={q.questionId} className="hover:bg-slate-50">
+                          <td className="p-2.5 font-medium text-slate-900 text-xs truncate max-w-[300px]">
+                            <span className="font-bold text-slate-500 mr-1.5">Q{q.questionId}.</span>
+                            {q.text}
+                          </td>
+                          <td className="p-2.5 text-slate-600 text-xs whitespace-nowrap">{q.dimensionName}</td>
+                          <td className="p-2.5 text-center font-mono font-bold text-slate-900 text-xs">{q.averageScore.toFixed(2)}</td>
+                          <td className="p-2.5 text-center">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.badge}`}>
+                              {q.favorabilityIndex} pts
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* Section 8: Síntese Técnica e Conclusão Pericial */}
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
+                <FileText className="text-[#2D6A4F]" size={18} />
+                <h2 className="text-sm font-black text-slate-900">8. SÍNTESE TÉCNICA E CONCLUSÃO PERICIAL</h2>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-2.5">
+                <p>{analytics.synthesisText}</p>
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-950 font-medium">
+                  <strong>Conclusão Técnica Pericial:</strong> {analytics.technicalConclusion}
+                </div>
+                <p className="text-[11px] text-slate-500 italic">
+                  Este documento consolida o diagnóstico quantitativo e qualitativo dos Riscos Psicossociais em conformidade com as diretrizes da NR-01 / Portaria MTE nº 1.419/2024, servindo como embasamento técnico para integração ao Inventário de Riscos Ocupacionais (GRO/PGR).
+                </p>
+              </div>
+            </section>
+
+            {/* Signatures Block */}
+            <div className="pt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-center text-xs">
+              <div className="space-y-1.5 flex flex-col items-center">
+                <div className="w-48 h-10 border-b border-slate-900 flex items-end justify-center pb-0.5">
+                  <span className="font-serif italic text-slate-700 text-xs">Assinado digitalmente</span>
+                </div>
+                <p className="font-bold text-slate-900 text-xs">{profile.name}</p>
+                <p className="text-slate-600 text-[11px] font-medium">{profile.councilRegister}</p>
+                <p className="text-slate-400 text-[10px]">Responsável Técnico pelo Diagnóstico</p>
+              </div>
+
+              <div className="space-y-1.5 flex flex-col items-center">
+                <div className="w-48 h-10 border-b border-slate-900 flex items-end justify-center pb-0.5">
+                  <span className="font-serif italic text-slate-700 text-xs">{company.rhContactName?.split(' ')[0] || 'Gestão de SST'}</span>
+                </div>
+                <p className="font-bold text-slate-900 text-xs">{company.rhContactName || 'Diretoria / Gestão de Gente'}</p>
+                <p className="text-slate-600 text-[11px] font-medium">{company.tradeName}</p>
+                <p className="text-slate-400 text-[10px]">Representante Legal da Empresa</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Page 5 Footer */}
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+            <span>Laudo Regulatório NR-01 • Validade: 12 meses</span>
+            <span className="font-bold text-slate-600">Página 5 de 5</span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Bottom Action Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
+        <button 
+          id="btn-back-bottom"
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors px-3 py-2 rounded-lg hover:bg-slate-100 cursor-pointer"
+        >
+          <ArrowLeft size={18} /> Voltar aos Relatórios
+        </button>
+
+        <button 
+          id="btn-print-bottom"
+          onClick={handleDirectPdfDownload}
+          disabled={isGeneratingPdf}
+          className="flex items-center justify-center gap-2 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:shadow-md active:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+        >
+          {isGeneratingPdf ? (
+            <>
+              <Loader2 size={17} className="animate-spin" /> {pdfProgress || 'Gerando PDF...'}
+            </>
+          ) : (
+            <>
+              <Printer size={17} /> Imprimir / Salvar Laudo em PDF
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UsersIcon(props: { className?: string; size?: number }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width={props.size || 24} 
+      height={props.size || 24} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={props.className}
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}

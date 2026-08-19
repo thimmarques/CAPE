@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  --chumbo: #162839;
+  --gold: #735c00;
+  --surface: #f8f9fa;
+  --text-primary: #162839;
+  --text-secondary: #666666;
+  --border: #e0e0e0;
+  --bg-hover: #f0f0f0;
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --warning: #ea580c;
+  --warning-light: #fed7aa;
+  --error: #dc2626;
+  --error-light: #fee2e2;
+  --info: #0891b2;
+  --info-light: #cffafe;
+}
+
+.dark {
+  --chumbo: #F8F9FA;
+  --gold: #D4AF37;
+  --surface: #121212;
+  --text-primary: #F8F9FA;
+  --text-secondary: #b0b0b0;
+  --border: #333333;
+  --bg-hover: #1e1e1e;
+  --success: #4ade80;
+  --success-light: #166534;
+  --warning: #fb923c;
+  --warning-light: #7c2d12;
+  --error: #f87171;
+  --error-light: #7f1d1d;
+  --info: #22d3ee;
+  --info-light: #164e63;
+}
+
+@layer base {
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input, textarea {
+    cursor: text;
+  }
+  input[type="radio"], input[type="checkbox"], select, label {
+    cursor: pointer;
+  }
+  input:disabled, textarea:disabled, select:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* ========================================================================= */
+/* PRINT / PDF GENERATION STYLES - NR-01 OFFICIAL TECHNICAL REPORT */
+/* ========================================================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  html, body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #root, main, aside, header, div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Hide navigation, sidebar, back buttons, and screen-only controls */
+  aside, 
+  header, 
+  .print\:hidden,
+  button:not(.print\:show) {
+    display: none !important;
+  }
+
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+
+  .print\:border-none {
+    border: none !important;
+  }
+
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  .print\:m-0 {
+    margin: 0 !important;
+  }
+
+  /* Page break rules for clean multi-page PDF generation */
+  section, 
+  table, 
+  tr, 
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  h1, h2, h3, h4 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Ensure charts and badges preserve backgrounds */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
