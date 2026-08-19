@@ -280,6 +280,7 @@ export default function App() {
               companies={companies}
               sessions={recentSessions}
               profile={profile}
+              selectedCompanyId={selectedCompanyId}
               onNavigate={handleNavigate}
             />
           )}

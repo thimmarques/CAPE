@@ -37,6 +37,11 @@
 }
 
 @layer base {
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
   button {
     cursor: pointer;
   }
@@ -51,6 +56,28 @@
   }
   input:disabled, textarea:disabled, select:disabled {
     cursor: not-allowed;
+  }
+}
+
+/* ========================================================================= */
+/* A4 REPORT CONTAINER STYLES (PREVENTS STRETCHING AND DISTORTION)          */
+/* ========================================================================= */
+.report-a4-page {
+  width: 210mm;
+  min-height: 297mm;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: normal;
+  line-height: 1.45;
+  transform: translateZ(0);
+}
+
+@media (max-width: 215mm) {
+  .report-a4-wrapper {
+    overflow-x: auto;
   }
 }
 

@@ -22,10 +22,10 @@ export const MOCK_COMPANIES: Company[] = [
     cnae: '11.11-1-11 - Fabricação de embalagens de material plástico',
     economicActivity: 'Fabricação de Embalagens de Material Plástico',
     riskDegree: 3,
-    unit: 'Unidade S',
+    unit: 'Unidade Sertãozinho',
     segment: 'Fabricação de Embalagens de Material Plástico',
     address: 'Av. das Indústrias, 1000 - Distrito Industrial',
-    city: 'Sorocaba',
+    city: 'Sertãozinho',
     state: 'SP',
     rhContactName: 'Gerência de Gente, Gestão e SESMT',
     rhContactEmail: 'rh.sesmt@pltda.com.br',
@@ -103,31 +103,38 @@ function generateExactRealSessions(): AssessmentSession[] {
   const company = MOCK_COMPANIES[0];
 
   company.departments.forEach(dept => {
+    const isProdOrManut = dept.name === 'Produção' || dept.name === 'Manutenção' || dept.name === 'Qualidade';
+    const isAdmOrTransp = dept.name === 'Administrativo' || dept.name === 'Transporte';
+
     for (let i = 1; i <= dept.headcount; i++) {
       const responses = QUESTIONS.map(q => {
         let score: 1 | 2 | 3 | 4 = 3;
         
-        // Autonomy and Control specific items
-        if (q.id === 8) { // Autonomia na forma e na ordem das tarefas (média 3.56, favorabilidade 64)
-          score = (i % 3 === 0 ? 2 : (i % 5 === 0 ? 3 : 4)) as 1|2|3|4;
-        } else if (q.id === 9) { // Controle sobre o ritmo de trabalho (média 3.47, favorabilidade 62)
-          score = (i % 3 === 0 ? 2 : (i % 4 === 0 ? 3 : 4)) as 1|2|3|4;
-        } else if (q.id === 13) { // Feedback construtivo da liderança (média 3.16, favorabilidade 54)
-          score = (i % 2 === 0 ? 2 : (i % 4 === 0 ? 1 : 4)) as 1|2|3|4;
-        } else if (q.id === 17) { // Trabalho reconhecido e valorizado (média 3.53, favorabilidade 63)
-          score = (i % 3 === 0 ? 2 : (i % 7 === 0 ? 3 : 4)) as 1|2|3|4;
-        } else if (q.id === 30) { // Expressar opiniões sem medo de represália (média 3.60, favorabilidade 65)
-          score = (i % 3 === 0 ? 2 : (i % 6 === 0 ? 3 : 4)) as 1|2|3|4;
-        } else if (q.id === 31) { // Opiniões consideradas pela gestão (média 3.45, favorabilidade 61)
-          score = (i % 3 === 0 ? 2 : (i % 5 === 0 ? 1 : 4)) as 1|2|3|4;
-        } else if (q.id === 35) { // Conhece os canais para relatar problemas (média 3.65, favorabilidade 66)
-          score = (i % 4 === 0 ? 2 : 4) as 1|2|3|4;
-        } else if (q.id === 36) { // Ações de promoção de bem-estar (média 3.27, favorabilidade 57)
-          score = (i % 2 === 0 ? 2 : (i % 5 === 0 ? 1 : 3)) as 1|2|3|4;
-        } else if (q.id === 32) { // Estabilidade no emprego (Favorabilidade geral 85.2)
-          score = (i % 7 === 0 ? 2 : 4) as 1|2|3|4;
-        } else if (q.id === 37) { // Assédio Moral
-          // Exact distribution per sector:
+        // Items in Atenção / Destaques Críticos
+        if (q.id === 13) { // Q13: Feedback construtivo da liderança (Média ~2.62, Fav ~54 pts - Atenção)
+          score = (i % 3 === 0 ? 1 : (i % 2 === 0 ? 2 : (i % 5 === 0 ? 4 : 3))) as 1|2|3|4;
+        } else if (q.id === 36) { // Q36: Ações de promoção de bem-estar (Média ~2.71, Fav ~57 pts - Atenção)
+          score = (i % 3 === 0 ? 2 : (i % 4 === 0 ? 1 : (i % 5 === 0 ? 4 : 3))) as 1|2|3|4;
+        } else if (q.id === 31) { // Q31: Opiniões consideradas pela gestão (Média ~2.83, Fav ~61 pts - Atenção)
+          score = (i % 3 === 0 ? 2 : (i % 7 === 0 ? 1 : (i % 2 === 0 ? 3 : 4))) as 1|2|3|4;
+        } else if (q.id === 9) { // Q9: Controle sobre o ritmo de trabalho (Média ~2.86, Fav ~62 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 2 === 0 ? 2 : (i % 5 === 0 ? 1 : 3))
+            : (i % 3 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.id === 17) { // Q17: Trabalho reconhecido e valorizado (Média ~2.89, Fav ~63 pts - Atenção)
+          score = (i % 3 === 0 ? 2 : (i % 6 === 0 ? 1 : (i % 2 === 0 ? 3 : 4))) as 1|2|3|4;
+        } else if (q.id === 8) { // Q8: Autonomia na forma e na ordem das tarefas (Média ~2.92, Fav ~64 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 3 === 0 ? 2 : (i % 4 === 0 ? 3 : (i % 5 === 0 ? 2 : 4)))
+            : (i % 4 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.id === 30) { // Q30: Expressar opiniões sem medo de represália (Média ~2.95, Fav ~65 pts - Atenção)
+          score = (i % 3 === 0 ? 2 : (i % 8 === 0 ? 1 : (i % 2 === 0 ? 3 : 4))) as 1|2|3|4;
+        } else if (q.id === 35) { // Q35: Conhece os canais para relatar problemas (Média ~2.98, Fav ~66 pts - Atenção)
+          score = (i % 3 === 0 ? 2 : (i % 2 === 0 ? 3 : 4)) as 1|2|3|4;
+        } else if (q.id === 32) { // Q32: Estabilidade no emprego (Favorabilidade ~85.2 pts - Fator Protetivo)
+          score = (i % 7 === 0 ? 2 : (i % 5 === 0 ? 3 : 4)) as 1|2|3|4;
+        } else if (q.id === 37) { // Q37: Assédio Moral
+          // Distribuição exata por setor:
           // Produção: 31 de 94 (33.0%)
           // Operacional/Logística: 2 de 11 (18.2%)
           // Transporte: 0 de 11 (0.0%)
@@ -135,7 +142,7 @@ function generateExactRealSessions(): AssessmentSession[] {
           // Manutenção: 5 de 10 (50.0%)
           // Qualidade: 3 de 7 (42.9%)
           if (dept.name === 'Produção') {
-            score = (i <= 31 ? (i <= 3 ? 1 : 2) : 4) as 1|2|3|4;
+            score = (i <= 31 ? (i <= 4 ? 1 : 2) : 4) as 1|2|3|4;
           } else if (dept.name === 'Operacional / Logística') {
             score = (i <= 2 ? 2 : 4) as 1|2|3|4;
           } else if (dept.name === 'Transporte') {
@@ -147,8 +154,8 @@ function generateExactRealSessions(): AssessmentSession[] {
           } else if (dept.name === 'Qualidade') {
             score = (i <= 3 ? 2 : 4) as 1|2|3|4;
           }
-        } else if (q.id === 38) { // Assédio Sexual
-          // Exact distribution per sector:
+        } else if (q.id === 38) { // Q38: Assédio Sexual
+          // Distribuição exata por setor:
           // Produção: 5 de 94 (5.3%)
           // Operacional/Logística: 1 de 11 (9.1%)
           // Transporte: 0 de 11 (0.0%)
@@ -166,8 +173,28 @@ function generateExactRealSessions(): AssessmentSession[] {
           } else if (dept.name === 'Qualidade') {
             score = (i <= 1 ? 2 : 4) as 1|2|3|4;
           }
-        } else {
-          score = (i % 6 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.dimensionId === 'dim-org') { // Organização do Trabalho (Fav ~58 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 2 === 0 ? 2 : (i % 5 === 0 ? 1 : 3))
+            : (i % 3 === 0 ? 2 : 4) as 1|2|3|4;
+        } else if (q.dimensionId === 'dim-sau') { // Saúde Mental e Equilíbrio (Fav ~59 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 2 === 0 ? 2 : (i % 4 === 0 ? 1 : 3))
+            : (i % 3 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.dimensionId === 'dim-aut') { // Autonomia e Controle (Fav ~63 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 3 === 0 ? 2 : (i % 4 === 0 ? 3 : 4))
+            : (i % 4 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.dimensionId === 'dim-lid') { // Liderança (Fav ~61 pts - Atenção)
+          score = isProdOrManut 
+            ? (i % 3 === 0 ? 2 : (i % 5 === 0 ? 1 : 3))
+            : (i % 3 === 0 ? 3 : 4) as 1|2|3|4;
+        } else if (q.dimensionId === 'dim-rel') { // Relacionamento e Apoio Social (Fav ~74 pts - Favorável)
+          score = (i % 4 === 0 ? 3 : (i % 9 === 0 ? 2 : 4)) as 1|2|3|4;
+        } else { // Segurança Psicológica e Geral (Fav ~71 pts - Favorável)
+          score = isAdmOrTransp 
+            ? (i % 5 === 0 ? 3 : 4)
+            : (i % 4 === 0 ? 2 : (i % 3 === 0 ? 3 : 4)) as 1|2|3|4;
         }
 
         return { questionId: q.id, score };

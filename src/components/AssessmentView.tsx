@@ -32,6 +32,12 @@ export function AssessmentView({
     initialRespondentData?.companyId || selectedCompanyId || companies[0]?.id || ''
   );
 
+  useEffect(() => {
+    if (selectedCompanyId && selectedCompanyId !== activeCompanyId) {
+      setActiveCompanyId(selectedCompanyId);
+    }
+  }, [selectedCompanyId]);
+
   const activeCompany = companies.find(c => c.id === activeCompanyId) || companies[0];
 
   // Collaborator & Department details

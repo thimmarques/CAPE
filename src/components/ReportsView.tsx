@@ -12,13 +12,20 @@ interface ReportsViewProps {
   companies: Company[];
   sessions?: AssessmentSession[];
   profile: ProfessionalProfile;
+  selectedCompanyId?: string;
   onNavigate?: (view: 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment', companyId?: string) => void;
 }
 
-export function ReportsView({ companies, sessions = [], profile, onNavigate }: ReportsViewProps) {
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('all');
+export function ReportsView({ companies, sessions = [], profile, selectedCompanyId: initialCompanyId, onNavigate }: ReportsViewProps) {
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(initialCompanyId || 'all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewingReportCompany, setViewingReportCompany] = useState<Company | null>(null);
+  const [viewingReportCompany, setViewingReportCompany] = useState<Company | null>(() => {
+    if (initialCompanyId && initialCompanyId !== 'all') {
+      const match = companies.find(c => c.id === initialCompanyId);
+      return match || null;
+    }
+    return null;
+  });
   const [autoPrintReport, setAutoPrintReport] = useState<boolean>(false);
 
   const reportList = companies.map((c) => {

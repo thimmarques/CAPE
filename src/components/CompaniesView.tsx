@@ -310,10 +310,10 @@ export function CompaniesView({
         {filteredCompanies.length > 0 && (
           <div className="hidden lg:grid grid-cols-12 gap-4 px-5 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             <div className="col-span-4">Empresa / Razão Social</div>
-            <div className="col-span-3">CNPJ</div>
+            <div className="col-span-2">CNPJ</div>
             <div className="col-span-2">Total de Colaboradores</div>
             <div className="col-span-2">Questionário HSE-IT</div>
-            <div className="col-span-1 text-right pr-1">Ações</div>
+            <div className="col-span-2 text-right pr-1">Ações</div>
           </div>
         )}
 
@@ -347,9 +347,9 @@ export function CompaniesView({
               </div>
 
               {/* 2. CNPJ */}
-              <div className="col-span-3 flex items-center gap-2">
+              <div className="col-span-2 flex items-center gap-2">
                 <span className="lg:hidden text-[10px] font-bold text-slate-400 uppercase tracking-wider">CNPJ:</span>
-                <span className="font-mono text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-md">
+                <span className="font-mono text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-md truncate">
                   {company.cnpj}
                 </span>
               </div>
@@ -390,8 +390,20 @@ export function CompaniesView({
                 </div>
               </div>
 
-              {/* Ações: Laudo PDF e Edição (Ícones funcionais) */}
-              <div className="col-span-1 flex items-center justify-end gap-1.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+              {/* Ações: Iniciar Questionário (para novos clientes / não concluídos), Laudo PDF e Edição */}
+              <div className="col-span-2 flex items-center justify-end gap-1.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                {!progress.isFullyCompleted && (
+                  <button 
+                    onClick={() => onNavigate('assessment', company.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-[#2D6A4F] hover:bg-[#3A5A40] rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    title="Iniciar Coleta de Respostas do Questionário HSE-IT"
+                    aria-label="Iniciar Questionário"
+                  >
+                    <Play size={13} fill="currentColor" />
+                    <span>Iniciar</span>
+                  </button>
+                )}
+
                 <button 
                   onClick={() => onNavigate('reports', company.id)}
                   className="p-2 text-slate-500 hover:text-[#2D6A4F] hover:bg-[#2D6A4F]/10 border border-slate-200/80 hover:border-[#2D6A4F]/30 rounded-lg transition-colors cursor-pointer"
@@ -542,20 +554,10 @@ export function CompaniesView({
 
               {/* Section 2: QUANTIDADE DE COLABORADORES E SETORES (Core Feature) */}
               <div className="space-y-4 pt-4 border-t border-slate-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                     <Users size={15} className="text-[#2D6A4F]" /> 2. Quantidade de Colaboradores & Base de Respondentes
                   </h4>
-                  
-                  {departmentsSum > 0 && departmentsSum !== Number(formData.employeeCount) && (
-                    <button
-                      type="button"
-                      onClick={handleSyncHeadcount}
-                      className="text-xs text-[#2D6A4F] font-bold hover:underline flex items-center gap-1"
-                    >
-                      <RefreshCw size={12} /> Sincronizar Total ({departmentsSum} colab.)
-                    </button>
-                  )}
                 </div>
 
                 {/* Card com os 2 campos de Colaboradores: Total da Empresa + Total que Responderam */}
@@ -609,25 +611,6 @@ export function CompaniesView({
                     </div>
                   </div>
                 </div>
-
-                {/* Headcount validation alert if sum differs */}
-                {departmentsSum > 0 && departmentsSum !== Number(formData.employeeCount) && (
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                      <span>
-                        A soma dos setores (<strong>{departmentsSum}</strong> colab.) é diferente do total da empresa (<strong>{formData.employeeCount}</strong> colab.).
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSyncHeadcount}
-                      className="px-2.5 py-1 bg-amber-600 text-white font-bold rounded hover:bg-amber-700 transition-colors"
-                    >
-                      Ajustar Total
-                    </button>
-                  </div>
-                )}
 
                 {/* Department List with Headcount per Sector */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
