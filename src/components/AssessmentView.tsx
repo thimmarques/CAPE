@@ -354,19 +354,45 @@ export function AssessmentView({
             <div><strong>Data de Coleta:</strong> {new Date().toLocaleDateString('pt-BR')}</div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <button
-              onClick={handleResetForm}
-              className="w-full sm:w-auto px-6 py-3 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2"
-            >
-              <Play size={14} fill="currentColor" /> Responder Próximo Colaborador
-            </button>
-            <button
-              onClick={() => onNavigate('reports', activeCompany.id)}
-              className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
-            >
-              <FileText size={14} /> Ver Laudo & Relatório (PDF)
-            </button>
+          {/* Actions on Success */}
+          <div className="space-y-3 pt-2">
+            {progress && progress.totalCompleted >= progress.totalRequired ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 text-center font-semibold">
+                ✓ Limite atingido: Todos os <strong>{progress.totalRequired}</strong> colaboradores do questionário já responderam para esta empresa. Censo 100% concluído!
+              </div>
+            ) : null}
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              {progress && progress.totalCompleted >= progress.totalRequired ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full sm:w-auto px-6 py-3 bg-slate-200 text-slate-400 rounded-xl text-xs font-bold transition-all shadow-none cursor-not-allowed flex items-center justify-center gap-2 opacity-60"
+                  title="Todos os participantes do questionário já registraram suas respostas"
+                >
+                  <Check size={14} /> Questionário Finalizado ({progress.totalCompleted}/{progress.totalRequired})
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResetForm}
+                  className="w-full sm:w-auto px-6 py-3 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Play size={14} fill="currentColor" /> Responder Próximo Colaborador ({progress ? `${progress.totalCompleted + 1} de ${progress.totalRequired}` : ''})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigate('reports', activeCompany.id)}
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  progress && progress.totalCompleted >= progress.totalRequired
+                    ? 'bg-[#2D6A4F] hover:bg-[#3A5A40] text-white shadow-sm'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'
+                }`}
+              >
+                <FileText size={14} /> Ver Laudo & Relatório (PDF)
+              </button>
+            </div>
           </div>
         </div>
       ) : (

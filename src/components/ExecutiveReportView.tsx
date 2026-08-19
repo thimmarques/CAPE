@@ -132,37 +132,38 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           backgroundColor: '#ffffff',
           cacheBust: true,
           fontEmbedCSS: '',
+          width: 794,
+          height: 1123,
+          canvasWidth: 1985,
+          canvasHeight: 2808,
+          style: {
+            margin: '0',
+            marginLeft: '0',
+            marginRight: '0',
+            marginTop: '0',
+            marginBottom: '0',
+            padding: '32px 32px',
+            width: '794px',
+            minWidth: '794px',
+            maxWidth: '794px',
+            height: '1123px',
+            minHeight: '1123px',
+            maxHeight: '1123px',
+            boxSizing: 'border-box',
+            border: 'none',
+            borderRadius: '0',
+            boxShadow: 'none',
+            transform: 'none',
+            position: 'static',
+          }
         });
-
-        // Load image to compute exact aspect ratio and avoid any font or dimension stretching
-        const img = new Image();
-        img.src = dataUrl;
-        await new Promise((resolve) => {
-          img.onload = () => resolve(true);
-          img.onerror = () => resolve(false);
-        });
-
-        const imgWidthPx = img.naturalWidth || img.width || 794;
-        const imgHeightPx = img.naturalHeight || img.height || 1123;
-        const imgRatio = imgWidthPx / imgHeightPx;
-
-        // Calculate proportional width and height on standard A4 page
-        let renderWidth = pdfPageWidth;
-        let renderHeight = pdfPageWidth / imgRatio;
-
-        if (renderHeight > pdfPageHeight) {
-          renderHeight = pdfPageHeight;
-          renderWidth = pdfPageHeight * imgRatio;
-        }
-
-        const xOffset = Math.max(0, (pdfPageWidth - renderWidth) / 2);
-        const yOffset = 0;
 
         if (i > 0) {
           pdf.addPage('a4', 'portrait');
         }
 
-        pdf.addImage(dataUrl, 'PNG', xOffset, yOffset, renderWidth, renderHeight, undefined, 'FAST');
+        // Direct 1:1 A4 mapping (0, 0, 210mm, 297mm) with balanced symmetrical margins
+        pdf.addImage(dataUrl, 'PNG', 0, 0, pdfPageWidth, pdfPageHeight, undefined, 'FAST');
       }
 
       setPdfProgress('Salvando arquivo...');
@@ -274,6 +275,164 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
   }));
 
   const globalFav = getFavBadge(analytics.overallFavorability);
+
+  // Dynamic calculations for Topics 8 & 9 based on real questionnaire data
+  const totalEmployees = analytics.totalEmployees || company.employeeCount || 0;
+  const evaluatedEmployees = analytics.evaluatedEmployees || company.respondedEmployeeCount || 0;
+  const adherenceRate = analytics.adherenceRate || (totalEmployees > 0 ? Math.round((evaluatedEmployees / totalEmployees) * 100) : 100);
+  const overallFavScore = analytics.overallFavorability || 0;
+
+  // Sorted Dimensions (lowest favorability first)
+  const sortedDimsAsc = [...analytics.dimensionScores].sort((a, b) => a.favorabilityIndex - b.favorabilityIndex);
+  const attentionDims = sortedDimsAsc.filter(d => d.favorabilityIndex < 67);
+  const lowestDimsText = attentionDims.length > 0
+    ? attentionDims.map(d => `${d.dimensionName} (${d.favorabilityIndex} pts)`).join(', ')
+    : sortedDimsAsc.slice(0, 2).map(d => `${d.dimensionName} (${d.favorabilityIndex} pts)`).join(' e ');
+
+  // Sorted Departments by count (sample size) and by favorability
+  const sortedDeptsByCount = [...analytics.departmentScores].sort((a, b) => b.respondentsCount - a.respondentsCount);
+  const largestDept = sortedDeptsByCount[0];
+  const sortedDeptsByFavAsc = [...analytics.departmentScores].sort((a, b) => a.favorabilityIndex - b.favorabilityIndex);
+  const attentionDepts = sortedDeptsByFavAsc.filter(d => d.favorabilityIndex < 67);
+
+  // Largest Dept lowest dimension
+  const largestDeptLowestDims = largestDept?.dimensionScores 
+    ? [...largestDept.dimensionScores].sort((a, b) => a.favorabilityIndex - b.favorabilityIndex).slice(0, 2)
+    : [];
+
+  // Harassment & Conduct analysis
+  const moralRate = analytics.moralHarassmentStats?.overallRate || 0;
+  const sexualRate = analytics.sexualHarassmentStats?.overallRate || 0;
+  const moralAffected = analytics.moralHarassmentStats?.overallAffectedCount || 0;
+  const sexualAffected = analytics.sexualHarassmentStats?.overallAffectedCount || 0;
+  
+  const moralHighestDept = analytics.moralHarassmentStats?.departmentStats?.find(d => d.rate > 3);
+  const sexualHighestDept = analytics.sexualHarassmentStats?.departmentStats?.find(d => d.rate > 0);
+
+  // Key lowest scoring question themes for textual synthesis
+  const topCriticalThemes = analytics.worstQuestions.slice(0, 4).map(q => {
+    const text = q.text.replace(/^[0-9]+\.\s*/, '');
+    return text.length > 42 ? text.substring(0, 40) + '...' : text;
+  });
+
+  const referenceYear = analytics.referenceYear || company.referenceYear || new Date().getFullYear().toString();
+  const companyDisplayName = company.tradeName || company.corporateName || 'organização';
+  const unitText = analytics.unit || company.unit ? `da unidade ${analytics.unit || company.unit}` : 'da organização';
+
+  // Topic 3: Dynamic Methodological Observation
+  const getMethodologicalObservation = () => {
+    if (!analytics.departmentScores || analytics.departmentScores.length === 0) {
+      return `Os dados representam a totalidade dos ${evaluatedEmployees} colaboradores participantes da empresa.`;
+    }
+    const sorted = [...analytics.departmentScores].sort((a, b) => b.respondentsCount - a.respondentsCount);
+    const largest = sorted[0];
+    const smallDepts = sorted.filter(d => d.respondentsCount < 12);
+    const smallest = sorted[sorted.length - 1];
+
+    let obs = `O setor de ${largest.departmentName} apresenta a amostra mais representativa, com ${largest.respondentsCount} respondente${largest.respondentsCount !== 1 ? 's' : ''} (${largest.percentageOfTotal}% do total avaliado). `;
+
+    if (smallDepts.length > 0) {
+      const smallDeptNames = smallDepts.map(d => d.departmentName).join(', ');
+      obs += `O(s) setor(es) com amostras inferiores a 12 participantes (${smallDeptNames}) devem ter seus resultados interpretados como indicativos, considerando a sensibilidade estatística da amostragem reduzida. `;
+      if (smallest && smallest.respondentsCount > 0 && smallest.departmentId !== largest.departmentId) {
+        const weightPerResp = Math.round(100 / smallest.respondentsCount);
+        obs += `No setor de ${smallest.departmentName}, por exemplo, cada resposta individual corresponde a aproximadamente ${weightPerResp}% da amostra setorial.`;
+      }
+    } else {
+      obs += `Todos os setores avaliados apresentaram amostragem consistente para a estratificação setorial.`;
+    }
+    return obs;
+  };
+
+  // Topic 4: Dynamic Synthesis Text
+  const getTopic4Synthesis = () => {
+    const attentionDimensions = analytics.dimensionScores.filter(d => d.favorabilityIndex < 67);
+    const favorableDimensions = analytics.dimensionScores.filter(d => d.favorabilityIndex >= 67);
+    const attentionDepartments = analytics.departmentScores.filter(d => d.favorabilityIndex < 67);
+
+    let text = '';
+    if (attentionDimensions.length === 0) {
+      text += `No resultado geral da empresa, todas as 6 dimensões avaliadas encontram-se na faixa Favorável (baixo risco psicossocial), com destaque positivo para ${favorableDimensions[0]?.dimensionName || 'as rotinas gerais'} (${favorableDimensions[0]?.favorabilityIndex.toString().replace('.', ',') || '0'} pts). `;
+    } else {
+      const dimsList = attentionDimensions.map(d => `${d.dimensionName} (${d.favorabilityIndex.toString().replace('.', ',')})`).join(', ');
+      text += `No resultado geral da empresa, ${attentionDimensions.length === 1 ? 'o único indicador classificado na faixa de Atenção é' : 'os indicadores classificados na faixa de Atenção são'} ${dimsList}. `;
+    }
+
+    if (attentionDepartments.length > 0) {
+      const deptDetails = attentionDepartments.map(dept => {
+        const deptAttDims = dept.dimensionScores?.filter(d => d.favorabilityIndex < 67) || [];
+        if (deptAttDims.length > 0) {
+          return `no setor de ${dept.departmentName}, observa-se atenção para ${deptAttDims.map(d => `${d.dimensionName} (${d.favorabilityIndex.toString().replace('.', ',')})`).join(' e ')}`;
+        }
+        return `o setor de ${dept.departmentName} registrou média de ${dept.favorabilityIndex.toString().replace('.', ',')} pts`;
+      }).join('; ');
+      text += `Na análise setorial, ${deptDetails}. `;
+    } else {
+      text += `Na análise setorial, todos os setores avaliados mantiveram índice consolidado na faixa Favorável. `;
+    }
+
+    if (attentionDimensions.length > 0) {
+      text += `As demais dimensões avaliadas permanecem na faixa Favorável.`;
+    }
+    return text;
+  };
+
+  // Topic 4: Dynamic Dimension Technical Description
+  const getDimensionTechnicalDesc = (dimId: string, fav: number) => {
+    const isFav = fav >= 67;
+    const isWarn = fav >= 40 && fav < 67;
+    switch (dimId) {
+      case 'dim-org':
+        return isFav 
+          ? 'Estrutura clara de demandas, prazos e rotinas de trabalho bem definidas.'
+          : isWarn
+          ? 'Sobrecarga de ritmo ou prazos exigem revisão ergonômica e organizacional das rotinas.'
+          : 'Alto volume de demandas e pressão temporal crítica com risco de sobrecarga.';
+      case 'dim-aut':
+        return isFav
+          ? 'Boa autonomia sobre o ritmo de trabalho e métodos de execução das tarefas.'
+          : isWarn
+          ? 'Ponto de atenção prioritário, com demanda por maior flexibilidade no ritmo e participação nas decisões operacionais.'
+          : 'Baixo controle sobre as atividades e rigidez excessiva nos processos operacionais.';
+      case 'dim-lid':
+        return isFav
+          ? 'Percepção positiva quanto à orientação, clareza e suporte prestado pelas chefias imediatas.'
+          : isWarn
+          ? 'Necessidade de estruturação de rotinas periódicas de feedback e alinhamento de liderança.'
+          : 'Dificuldades no suporte da gestão imediata e lacunas de liderança ativa.';
+      case 'dim-rel':
+        return isFav
+          ? 'Alto índice de cooperação mútua, respeito e suporte colaborativo entre pares.'
+          : isWarn
+          ? 'Oportunidade para fortalecer a integração entre equipes e o clima colaborativo.'
+          : 'Conflitos interpessoais frequentes e baixo apoio entre colegas de trabalho.';
+      case 'dim-sau':
+        return isFav
+          ? 'Bom equilíbrio psicossocial geral e preservação do bem-estar e saúde mental dos colaboradores.'
+          : isWarn
+          ? 'Sinais moderados de estresse e fadiga exigindo ações contínuas de promoção da saúde mental.'
+          : 'Elevado nível de desgaste emocional e queixas de estresse e esgotamento ocupacional.';
+      case 'dim-seg':
+        return isFav
+          ? 'Clima geral ético, com confiança institucional e canais de segurança psicológica ativos.'
+          : isWarn
+          ? 'Recomendação de atenção pontual aos canais confidenciais e clareza de diretrizes de conduta.'
+          : 'Insegurança psicológica e necessidade imediata de reforço ético e acolhimento.';
+      default:
+        return isFav ? 'Índice dentro dos padrões favoráveis e seguros.' : 'Requer acompanhamento preventivo no Plano de Ação.';
+    }
+  };
+
+  // Topic 7: Dynamic Observation
+  const getWorstQuestionsObservation = () => {
+    const worstCount = analytics.worstQuestions?.length || 0;
+    if (worstCount === 0) {
+      return 'Todos os itens avaliados registraram índices favoráveis na escala Likert.';
+    }
+    const lowestQuestions = analytics.worstQuestions.slice(0, 8);
+    const dimsAffected = Array.from(new Set(lowestQuestions.map(q => q.dimensionName)));
+    return `Os ${Math.min(8, worstCount)} itens com menor pontuação indicam os pontos prioritários para intervenção preventiva na empresa, concentrando-se principalmente nas dimensões de ${dimsAffected.join(', ')}.`;
+  };
 
   return (
     <div className="p-4 sm:p-6 space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto">
@@ -423,7 +582,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <span className="text-[10px] text-slate-500 font-bold uppercase block">Não Participantes</span>
                   <span className="text-2xl font-black text-slate-700 mt-0.5 block">{analytics.unansweredEmployees}</span>
-                  <span className="text-[10px] text-slate-500 font-semibold">{analytics.unansweredRate}% (10%)</span>
+                  <span className="text-[10px] text-slate-500 font-semibold">{analytics.unansweredRate}%</span>
                 </div>
               </div>
 
@@ -515,7 +674,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
 
               {/* Observação Metodológica */}
               <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900 leading-snug">
-                <strong>Observação metodológica:</strong> a Produção apresenta a amostra mais robusta, com 94 respondentes. Os demais setores possuem amostras inferiores a 12 participantes, portanto seus resultados devem ser interpretados como indicativos, e não como conclusões setoriais definitivas. No setor de Qualidade, por exemplo, cada resposta corresponde aproximadamente a 14% da amostra do setor.
+                <strong>Observação metodológica:</strong> {getMethodologicalObservation()}
               </div>
             </section>
 
@@ -690,7 +849,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
               <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide">Síntese dos resultados</h3>
               <p>
-                No resultado geral da empresa, o único indicador classificado na faixa de Atenção é <strong>Autonomia e Controle (66,6)</strong>. Na <strong>Produção</strong>, além de Autonomia e Controle (59,7), observa-se também resultado em faixa de atenção para <strong>Segurança Psicológica e Ética (64,1)</strong>. As demais dimensões avaliadas permanecem na faixa Favorável.
+                {getTopic4Synthesis()}
               </p>
             </div>
 
@@ -698,24 +857,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
               <h3 className="font-bold text-slate-900 text-xs">Detalhamento dos Resultados por Dimensão (Geral Empresa):</h3>
               <ul className="list-disc pl-5 space-y-1 text-xs">
-                <li>
-                  <strong>Organização do Trabalho (83,7 — Favorável):</strong> Estrutura clara de demandas, prazos e rotinas de trabalho bem definidas.
-                </li>
-                <li>
-                  <strong>Autonomia e Controle (66,6 — Atenção):</strong> Ponto de atenção prioritário, com demanda por maior flexibilidade no ritmo e participação nas decisões operacionais.
-                </li>
-                <li>
-                  <strong>Liderança (75,5 — Favorável):</strong> Percepção positiva quanto à orientação e ao suporte prestado pelas chefias imediatas.
-                </li>
-                <li>
-                  <strong>Relacionamento e Apoio Social (79,9 — Favorável):</strong> Alto índice de cooperação mútua, respeito e suporte entre pares.
-                </li>
-                <li>
-                  <strong>Saúde Mental e Equilíbrio (75,4 — Favorável):</strong> Bom equilíbrio psicossocial geral e preservação do bem-estar dos colaboradores.
-                </li>
-                <li>
-                  <strong>Segurança Psicológica e Ética (69,7 — Favorável):</strong> Clima geral ético, com recomendação de atenção pontual na área de Produção (64,1).
-                </li>
+                {analytics.dimensionScores.map(dim => {
+                  const badge = getFavBadge(dim.favorabilityIndex);
+                  return (
+                    <li key={dim.dimensionId}>
+                      <strong>{dim.dimensionName} ({dim.favorabilityIndex.toString().replace('.', ',')} — {badge.label}):</strong> {getDimensionTechnicalDesc(dim.dimensionId, dim.favorabilityIndex)}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>
@@ -763,7 +912,9 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                   ))}
                 </div>
                 <p className="text-slate-600 text-[11px] pt-0.5">
-                  Os resultados indicam percepção favorável quanto à segurança e estabilidade do emprego em todos os setores avaliados.
+                  {(analytics.stabilityStats.overallFavorability || 0) >= 67
+                    ? `Os resultados indicam percepção favorável (${analytics.stabilityStats.overallFavorability} pts) quanto à segurança e estabilidade do emprego na organização, constituindo importante fator de proteção psicossocial.`
+                    : `O índice de estabilidade no emprego (${analytics.stabilityStats.overallFavorability} pts) requer atenção e alinhamento de expectativas no plano de comunicação interna.`}
                 </p>
               </div>
 
@@ -791,7 +942,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                         <tr className="bg-slate-100 font-bold">
                           <td className="p-1.5 text-slate-900">Empresa (geral)</td>
                           <td className="p-1.5 text-center font-mono">{analytics.moralHarassmentStats.overallRate}%</td>
-                          <td className="p-1.5 text-center font-mono text-[11px]">43 de 144</td>
+                          <td className="p-1.5 text-center font-mono text-[11px]">{analytics.moralHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
                           <td className="p-1.5 text-center">
                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${getBullyingBadge(analytics.moralHarassmentStats.overallRate).badge}`}>
                               {getBullyingBadge(analytics.moralHarassmentStats.overallRate).label}
@@ -840,10 +991,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
 
                 <div className="text-[11px] text-slate-600 space-y-1 pt-1 border-t border-slate-200">
                   <p>
-                    <strong>Distribuição geral:</strong> Nunca 101 / Raramente 15 / Às vezes 22 / Frequente 3 / Sempre 3.
+                    <strong>Distribuição geral:</strong> Nunca {analytics.moralHarassmentStats.distribution?.nunca || 0} / Raramente {analytics.moralHarassmentStats.distribution?.raramente || 0} / Às vezes {analytics.moralHarassmentStats.distribution?.asVezes || 0} / Frequente {analytics.moralHarassmentStats.distribution?.frequente || 0} / Sempre {analytics.moralHarassmentStats.distribution?.sempre || 0}.
                   </p>
                   <p className="italic text-slate-500">
-                    O resultado geral constitui um ponto crítico de monitoramento, especialmente pela concentração de respostas positivas nas áreas de Produção, Manutenção e Qualidade. Nos setores com amostras pequenas, os dados devem ser interpretados com cautela, sem exposição ou identificação individual dos participantes.
+                    {analytics.moralHarassmentStats.overallRate > 25
+                      ? `O resultado geral atingiu patamar crítico (${analytics.moralHarassmentStats.overallRate}%), constituindo ponto prioritário de intervenção com fortalecimento imediato dos canais confidenciais e ações preventivas no PGR.`
+                      : analytics.moralHarassmentStats.overallRate >= 10
+                      ? `O resultado geral situa-se na faixa de atenção (${analytics.moralHarassmentStats.overallRate}%), exigindo capacitação de liderança e diálogo preventivo. Nos setores com pequenas amostras, os dados devem ser interpretados com cautela, sem exposição individual.`
+                      : `O resultado geral permanece em patamar favorável (${analytics.moralHarassmentStats.overallRate}%), recomendando-se a manutenção ativa de canais confidenciais de relato e ações educativas contínuas.`}
                   </p>
                 </div>
               </div>
@@ -876,7 +1031,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                       <tr className="bg-slate-100 font-bold">
                         <td className="p-1.5 text-slate-900">Empresa (geral)</td>
                         <td className="p-1.5 text-center font-mono">{analytics.sexualHarassmentStats.overallRate}%</td>
-                        <td className="p-1.5 text-center font-mono text-[11px]">9 de 144</td>
+                        <td className="p-1.5 text-center font-mono text-[11px]">{analytics.sexualHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
                         <td className="p-1.5 text-center">
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${getSexualBadge(analytics.sexualHarassmentStats.overallRate).badge}`}>
                             {getSexualBadge(analytics.sexualHarassmentStats.overallRate).label}
@@ -925,10 +1080,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
 
               <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-1">
                 <p>
-                  <strong>Distribuição geral:</strong> Nunca 135 / Raramente 6 / Às vezes 1 / Frequente 2 / Sempre 0.
+                  <strong>Distribuição geral:</strong> Nunca {analytics.sexualHarassmentStats.distribution?.nunca || 0} / Raramente {analytics.sexualHarassmentStats.distribution?.raramente || 0} / Às vezes {analytics.sexualHarassmentStats.distribution?.asVezes || 0} / Frequente {analytics.sexualHarassmentStats.distribution?.frequente || 0} / Sempre {analytics.sexualHarassmentStats.distribution?.sempre || 0}.
                 </p>
                 <p className="italic text-slate-500">
-                  Os resultados indicam necessidade de atenção institucional ao tema, especialmente nos setores que apresentaram índices mais elevados, preservando rigorosamente o sigilo dos participantes.
+                  {analytics.sexualHarassmentStats.overallRate > 10
+                    ? `O índice geral (${analytics.sexualHarassmentStats.overallRate}%) exige intervenção prioritária e imediata no âmbito da CIPAA e conformidade com a Lei nº 14.457/2022.`
+                    : analytics.sexualHarassmentStats.overallRate >= 3
+                    ? `Os resultados registram taxa de ${analytics.sexualHarassmentStats.overallRate}%, demandando atenção institucional contínua e reforço dos treinamentos de prevenção ao assédio sexual.`
+                    : `O indicador de condutas inadequadas ou assédio de natureza sexual manteve-se em patamar favorável (${analytics.sexualHarassmentStats.overallRate}%), reforçando a importância da manutenção das diretrizes éticas institucionais.`}
                 </p>
               </div>
             </section>
@@ -992,7 +1151,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
 
               <p className="text-[11px] text-slate-600 italic bg-slate-50 p-2 rounded border border-slate-200">
-                Os oito itens indicam pontos prioritários para intervenção preventiva, principalmente nos aspectos relacionados a feedback, reconhecimento, participação, autonomia, controle sobre o ritmo, segurança para manifestação e conhecimento dos canais institucionais.
+                {getWorstQuestionsObservation()}
               </p>
             </section>
 
@@ -1004,17 +1163,27 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 leading-relaxed space-y-1.5">
                 <p>
-                  A avaliação realizada com <strong>144 colaboradores</strong>, correspondente a <strong>90% do quadro da unidade</strong>, demonstra um cenário geral predominantemente favorável nas dimensões avaliadas pelo instrumento HSE-IT.
+                  A avaliação realizada com <strong>{evaluatedEmployees} colaboradores</strong> ({unitText}), correspondente a uma taxa de adesão de <strong>{adherenceRate}% do quadro efetivo</strong> ({totalEmployees} colaboradores no total), demonstra um cenário geral <strong>{overallFavScore >= 67 ? 'predominantemente favorável' : overallFavScore >= 40 ? 'em estado de atenção moderada' : 'em nível crítico de risco'}</strong> (índice global de <strong>{overallFavScore} pts</strong>) nas dimensões avaliadas pelo instrumento HSE-IT conforme a NR-1.
                 </p>
                 <p>
-                  Entretanto, os resultados evidenciam pontos específicos que requerem monitoramento e intervenção preventiva, especialmente relacionados à autonomia e controle, segurança psicológica, feedback, reconhecimento profissional, participação dos trabalhadores e canais de comunicação.
+                  Entretanto, os resultados evidenciam que os principais pontos que requerem monitoramento e intervenção preventiva concentram-se em <strong>{lowestDimsText}</strong>, refletindo temas prioritários levantados pelos respondentes{topCriticalThemes.length > 0 ? `, tais como: ${topCriticalThemes.join(', ')}` : ''}.
                 </p>
                 <p>
-                  Destaca-se ainda a presença de indicadores de assédio moral e assédio sexual que demandam atenção institucional, com resultados mais elevados em determinados setores. Esses indicadores devem ser considerados como sinais de alerta para aprofundamento da análise organizacional e fortalecimento das medidas preventivas.
+                  {moralRate > 0 || sexualRate > 0 ? (
+                    <>
+                      Destaca-se ainda a presença de indicadores críticos de conduta que demandam atenção institucional: registrou-se taxa de relato de <strong>{moralRate.toFixed(1)}% para assédio moral</strong> ({moralAffected} participante{moralAffected !== 1 ? 's' : ''}) e <strong>{sexualRate.toFixed(1)}% para assédio sexual</strong> ({sexualAffected} participante{sexualAffected !== 1 ? 's' : ''}){moralHighestDept || sexualHighestDept ? `, com maior concentração observada no setor de <strong>{(moralHighestDept || sexualHighestDept)?.departmentName}</strong>` : ''}. Esses índices constituem sinais de alerta para aprofundamento da análise organizacional e fortalecimento imediato dos canais confidenciais de acolhimento e denúncia.
+                    </>
+                  ) : (
+                    <>
+                      Os indicadores críticos de conduta (assédio moral e assédio sexual) apresentaram taxas nulas (0%) ou estritamente dentro da faixa de baixo risco / favorável, recomendando-se a manutenção ativa dos canais confidenciais e das diretrizes de ética e integridade.
+                    </>
+                  )}
                 </p>
-                <p>
-                  Na <strong>Produção</strong>, que representa a maior parcela da amostra, os resultados apontam maior necessidade de atenção para <strong>Autonomia e Controle</strong> e <strong>Segurança Psicológica e Ética</strong>.
-                </p>
+                {largestDept && (
+                  <p>
+                    No setor de <strong>{largestDept.departmentName}</strong>, que representa a maior parcela da amostra avaliada ({largestDept.respondentsCount} colaboradores, {largestDept.percentageOfTotal?.toFixed(1) || Math.round((largestDept.respondentsCount / (evaluatedEmployees || 1)) * 100)}% do total), os resultados apontam maior necessidade de atenção e acompanhamento para <strong>{largestDeptLowestDims.length > 0 ? largestDeptLowestDims.map(d => d.dimensionName).join(' e ') : 'as rotinas de trabalho e relações interpessoais'}</strong>.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -1026,13 +1195,13 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
               <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg text-xs text-slate-700 leading-relaxed space-y-1.5">
                 <p>
-                  Os resultados obtidos constituem importante instrumento para o direcionamento das ações de prevenção e melhoria contínua no ambiente de trabalho. De forma geral, a organização apresenta indicadores favoráveis em grande parte das dimensões avaliadas. Os principais pontos de atenção concentram-se em Autonomia e Controle, particularmente na Produção, e em aspectos relacionados à Segurança Psicológica, feedback, reconhecimento, participação, comunicação e prevenção de situações de assédio.
+                  Os resultados obtidos constituem subsídio técnico fundamental para o direcionamento das ações preventivas e de melhoria contínua na <strong>{companyDisplayName}</strong>. De modo geral, o diagnóstico aponta {overallFavScore >= 67 ? 'uma base organizacional sólida com indicadores favoráveis em grande parte das dimensões avaliadas' : 'oportunidades de melhoria estruturada no clima psicossocial'}, concentrando-se as prioridades de intervenção nas dimensões de <strong>{lowestDimsText}</strong>{attentionDepts.length > 0 ? `, com atenção dirigida especialmente ao(s) setor(es) de <strong>{attentionDepts.map(d => d.departmentName).join(', ')}</strong>` : ''}.
                 </p>
                 <p>
-                  Recomenda-se que os resultados sejam incorporados ao processo de Gerenciamento de Riscos Ocupacionais, servindo como subsídio para a elaboração e o acompanhamento do <strong>Plano de Ação 2026</strong>, com definição de responsáveis, prazos e indicadores de acompanhamento.
+                  Recomenda-se formalmente que as conclusões deste diagnóstico sejam incorporadas ao Gerenciamento de Riscos Ocupacionais (GRO) e ao Programa de Gerenciamento de Riscos (PGR) da organização, servindo como base técnica para a consolidação e execução do <strong>Plano de Ação {referenceYear}</strong>, com metas estabelecidas, cronograma, gestores responsáveis e indicadores de eficácia.
                 </p>
                 <p>
-                  As ações devem priorizar o fortalecimento das lideranças, a melhoria da comunicação interna, o reconhecimento profissional, a ampliação dos espaços de escuta e participação, a divulgação dos canais formais de relato e denúncia, a prevenção de situações de assédio e o acompanhamento periódico das condições psicossociais de trabalho. A integração desses resultados com os demais indicadores organizacionais, ocupacionais e de saúde permitirá o monitoramento contínuo dos fatores de risco psicossociais e a identificação precoce de situações que possam demandar intervenção preventiva.
+                  As ações devem priorizar o fortalecimento das lideranças, o aprimoramento dos fluxos de feedback e comunicação interna, a promoção da segurança psicológica e autonomia funcional, a ampla divulgação dos canais de reporte e denúncia (alinhado à CIPA/CIPAA e à Portaria MTE nº 1.419/2024) e o monitoramento psicossocial contínuo em ciclos periódicos de até 12 meses.
                 </p>
               </div>
             </section>

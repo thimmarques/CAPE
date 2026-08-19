@@ -134,8 +134,8 @@ export function calculateRealTimeAnalytics(company: Company, sessions: Assessmen
   const adherenceRate = totalEmployees > 0 ? Number(((evaluatedEmployees / totalEmployees) * 100).toFixed(1)) : 0;
   const unansweredRate = totalEmployees > 0 ? Number(((unansweredEmployees / totalEmployees) * 100).toFixed(1)) : 0;
 
-  // Check if this is the standard audited benchmark company (c-pltda)
-  const isBenchmarkCompany = company.id === 'c-pltda';
+  // Check if this is the standard audited benchmark company (c-pltda) with no user-recorded sessions yet
+  const isBenchmarkCompany = company.id === 'c-pltda' && companySessions.length === 0;
 
   if (isBenchmarkCompany) {
     const dimensionScores: DimensionScore[] = [
