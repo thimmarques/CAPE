@@ -250,3 +250,76 @@ export interface AnalyticsReport {
     indicator: string;
   }[];
 }
+
+export type StorageBucketName = 'company-assets' | 'user-avatars' | 'signatures' | 'reports';
+
+export interface SavedTechnicalReport {
+  id: string;
+  companyId: string;
+  companyName: string;
+  campaignId?: string;
+  title: string;
+  referenceYear: string;
+  applicationPeriod: string;
+  issuedDate: string;
+  authorId?: string;
+  authorName?: string;
+  authorCouncilRegister?: string;
+  overallScore: number;
+  overallFavorability: number;
+  overallRiskLevel: RiskLevel;
+  adherenceRate: number;
+  totalRespondents: number;
+  status: 'draft' | 'published' | 'archived';
+  analyticsData: AnalyticsReport;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface QuestionnaireTemplate {
+  id: string;
+  code: string; // ex: 'NR01_PSYCHOSOCIAL_V1'
+  title: string;
+  description: string;
+  normativeReference: string; // ex: 'NR-01 / Portaria MTE nº 1.419/2024'
+  scaleType: 'likert_4' | 'likert_5';
+  dimensions: Dimension[];
+  questions: Question[];
+  version: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type AuditAction = 
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'CREATE_COMPANY'
+  | 'UPDATE_COMPANY'
+  | 'DELETE_COMPANY'
+  | 'SUBMIT_ASSESSMENT'
+  | 'GENERATE_REPORT'
+  | 'EXPORT_REPORT_PDF'
+  | 'UPDATE_PROFILE'
+  | 'UPDATE_USER'
+  | 'UPLOAD_LOGO'
+  | 'UPLOAD_AVATAR'
+  | 'UPLOAD_SIGNATURE'
+  | 'SYSTEM_CONFIG_UPDATE';
+
+export interface AuditLogEntry {
+  id: string;
+  userId?: string;
+  userEmail: string;
+  userName?: string;
+  userRole?: UserRole;
+  action: AuditAction;
+  entityType: 'company' | 'assessment' | 'report' | 'profile' | 'user' | 'storage' | 'auth' | 'system';
+  entityId?: string;
+  entityName?: string;
+  details?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}

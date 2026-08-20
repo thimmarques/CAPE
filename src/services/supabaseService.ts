@@ -1,11 +1,22 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
-import { Company, AssessmentSession, ProfessionalProfile } from '../types';
+import { 
+  Company, 
+  AssessmentSession, 
+  ProfessionalProfile, 
+  SavedTechnicalReport, 
+  QuestionnaireTemplate,
+  StorageBucketName
+} from '../types';
 import { MOCK_COMPANIES, MOCK_SESSIONS, MOCK_PROFILE } from '../data/mockData';
+import { auditService } from './auditService';
+import { QUESTIONS } from '../data/questions';
 
 const LOCAL_STORAGE_KEYS = {
   COMPANIES: 'psychorisk_companies_v1',
   SESSIONS: 'psychorisk_sessions_v1',
   PROFILE: 'psychorisk_profile_v1',
+  REPORTS: 'psychorisk_saved_reports_v1',
+  TEMPLATES: 'psychorisk_templates_v1',
 };
 
 // ==========================================
@@ -63,6 +74,24 @@ export const setLocalProfile = (profile: ProfessionalProfile): void => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.PROFILE, JSON.stringify(profile));
   } catch (e) {
     console.error('Erro ao salvar perfil no localStorage:', e);
+  }
+};
+
+export const getLocalReports = (): SavedTechnicalReport[] => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEYS.REPORTS);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('Erro ao ler laudos do localStorage:', e);
+  }
+  return [];
+};
+
+export const setLocalReports = (reports: SavedTechnicalReport[]): void => {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.REPORTS, JSON.stringify(reports));
+  } catch (e) {
+    console.error('Erro ao salvar laudos no localStorage:', e);
   }
 };
 
@@ -194,6 +223,56 @@ const mapAppProfileToDb = (profile: ProfessionalProfile) => {
   };
 };
 
+const mapDbReportToApp = (dbRow: any): SavedTechnicalReport => {
+  return {
+    id: dbRow.id,
+    companyId: dbRow.company_id,
+    companyName: dbRow.company_name,
+    campaignId: dbRow.campaign_id || undefined,
+    title: dbRow.title,
+    referenceYear: dbRow.reference_year || '',
+    applicationPeriod: dbRow.application_period || '',
+    issuedDate: dbRow.issued_date,
+    authorId: dbRow.author_id || undefined,
+    authorName: dbRow.author_name || undefined,
+    authorCouncilRegister: dbRow.author_council_register || undefined,
+    overallScore: Number(dbRow.overall_score) || 0,
+    overallFavorability: Number(dbRow.overall_favorability) || 0,
+    overallRiskLevel: dbRow.overall_risk_level,
+    adherenceRate: Number(dbRow.adherence_rate) || 0,
+    totalRespondents: Number(dbRow.total_respondents) || 0,
+    status: dbRow.status || 'published',
+    analyticsData: dbRow.analytics_data,
+    notes: dbRow.notes || undefined,
+    createdAt: dbRow.created_at,
+    updatedAt: dbRow.updated_at,
+  };
+};
+
+const mapAppReportToDb = (report: SavedTechnicalReport) => {
+  return {
+    id: report.id,
+    company_id: report.companyId,
+    company_name: report.companyName,
+    campaign_id: report.campaignId || null,
+    title: report.title,
+    reference_year: report.referenceYear || null,
+    application_period: report.applicationPeriod || null,
+    issued_date: report.issuedDate,
+    author_id: report.authorId || null,
+    author_name: report.authorName || null,
+    author_council_register: report.authorCouncilRegister || null,
+    overall_score: report.overallScore,
+    overall_favorability: report.overallFavorability,
+    overall_risk_level: report.overallRiskLevel,
+    adherence_rate: report.adherenceRate,
+    total_respondents: report.totalRespondents,
+    status: report.status,
+    analytics_data: report.analyticsData,
+    notes: report.notes || null,
+  };
+};
+
 // ==========================================
 // SUPABASE SERVICE CRUD OPERATIONS
 // ==========================================
@@ -277,8 +356,10 @@ export const dbService = {
   },
 
   async saveCompany(company: Company): Promise<boolean> {
-    // 1. Always update local storage
     const current = getLocalCompanies();
+    const isNew = !current.some(c => c.id === company.id);
+
+    // 1. Always update local storage
     const idx = current.findIndex(c => c.id === company.id);
     let updated: Company[];
     if (idx >= 0) {
@@ -288,6 +369,19 @@ export const dbService = {
       updated = [company, ...current];
     }
     setLocalCompanies(updated);
+
+    // Register Audit Log
+    await auditService.logActivity({
+      action: isNew ? 'CREATE_COMPANY' : 'UPDATE_COMPANY',
+      entityType: 'company',
+      entityId: company.id,
+      entityName: company.tradeName,
+      details: {
+        cnpj: company.cnpj,
+        departmentsCount: company.departments?.length || 0,
+        employeeCount: company.employeeCount,
+      }
+    });
 
     // 2. Sync with Supabase if online
     const client = getSupabaseClient();
@@ -311,9 +405,19 @@ export const dbService = {
   },
 
   async deleteCompany(id: string): Promise<boolean> {
+    const current = getLocalCompanies();
+    const target = current.find(c => c.id === id);
+
     // 1. Remove from local
-    const current = getLocalCompanies().filter(c => c.id !== id);
-    setLocalCompanies(current);
+    setLocalCompanies(current.filter(c => c.id !== id));
+
+    // Register Audit Log
+    await auditService.logActivity({
+      action: 'DELETE_COMPANY',
+      entityType: 'company',
+      entityId: id,
+      entityName: target?.tradeName || id,
+    });
 
     // 2. Remove from Supabase
     const client = getSupabaseClient();
@@ -387,6 +491,20 @@ export const dbService = {
     const updated = [session, ...current.filter(s => s.id !== session.id)];
     setLocalSessions(updated);
 
+    // Register Audit Log
+    await auditService.logActivity({
+      action: 'SUBMIT_ASSESSMENT',
+      entityType: 'assessment',
+      entityId: session.id,
+      entityName: `Questionário - Setor ${session.departmentName}`,
+      details: {
+        companyId: session.companyId,
+        department: session.departmentName,
+        role: session.roleName,
+        answersCount: session.responses?.length || 0,
+      }
+    });
+
     // 2. Save to Supabase
     const client = getSupabaseClient();
     if (!client) return true;
@@ -425,7 +543,102 @@ export const dbService = {
     }
   },
 
-  // PROFILE
+  // REPORTS (TECHNICAL REPORTS NR-01)
+  async fetchReports(companyId?: string): Promise<SavedTechnicalReport[]> {
+    const client = getSupabaseClient();
+    if (!client) {
+      const local = getLocalReports();
+      return companyId ? local.filter(r => r.companyId === companyId) : local;
+    }
+
+    try {
+      let query = client
+        .from('technical_reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data) {
+        const reports = data.map(mapDbReportToApp);
+        setLocalReports(reports);
+        return reports;
+      }
+    } catch (e) {
+      console.error('Erro ao buscar laudos do Supabase:', e);
+    }
+
+    const local = getLocalReports();
+    return companyId ? local.filter(r => r.companyId === companyId) : local;
+  },
+
+  async saveReport(report: SavedTechnicalReport): Promise<boolean> {
+    // 1. Save locally
+    const current = getLocalReports();
+    const updated = [report, ...current.filter(r => r.id !== report.id)];
+    setLocalReports(updated);
+
+    // Register Audit Log
+    await auditService.logActivity({
+      action: 'GENERATE_REPORT',
+      entityType: 'report',
+      entityId: report.id,
+      entityName: report.title,
+      details: {
+        companyId: report.companyId,
+        companyName: report.companyName,
+        overallScore: report.overallScore,
+        overallRiskLevel: report.overallRiskLevel,
+        status: report.status,
+      }
+    });
+
+    // 2. Save to Supabase
+    const client = getSupabaseClient();
+    if (!client) return true;
+
+    try {
+      const dbPayload = mapAppReportToDb(report);
+      const { error } = await client
+        .from('technical_reports')
+        .upsert(dbPayload, { onConflict: 'id' });
+
+      if (error) {
+        console.error('Erro ao salvar laudo no Supabase:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exceção ao salvar laudo no Supabase:', e);
+      return false;
+    }
+  },
+
+  async deleteReport(id: string): Promise<boolean> {
+    const current = getLocalReports();
+    setLocalReports(current.filter(r => r.id !== id));
+
+    const client = getSupabaseClient();
+    if (!client) return true;
+
+    try {
+      const { error } = await client
+        .from('technical_reports')
+        .delete()
+        .eq('id', id);
+
+      return !error;
+    } catch (e) {
+      console.error('Exceção ao deletar laudo no Supabase:', e);
+      return false;
+    }
+  },
+
+  // PROFILE (CONSULTANCY PROFILE / RESPONSÁVEL TÉCNICO)
   async fetchProfile(): Promise<ProfessionalProfile> {
     const client = getSupabaseClient();
     if (!client) {
@@ -462,6 +675,19 @@ export const dbService = {
 
   async saveProfile(profile: ProfessionalProfile): Promise<boolean> {
     setLocalProfile(profile);
+
+    // Register Audit Log
+    await auditService.logActivity({
+      action: 'UPDATE_PROFILE',
+      entityType: 'profile',
+      entityId: profile.id,
+      entityName: profile.name,
+      details: {
+        councilRegister: profile.councilRegister,
+        consultancyName: profile.consultancyName,
+      }
+    });
+
     const client = getSupabaseClient();
     if (!client) return true;
 
@@ -481,4 +707,66 @@ export const dbService = {
       return false;
     }
   },
+
+  // STORAGE / UPLOAD DE ARQUIVOS (FOTOS, LOGOS, ASSINATURAS)
+  async uploadImage(
+    bucket: StorageBucketName,
+    file: File | Blob,
+    pathName: string
+  ): Promise<{ publicUrl: string | null; error?: string }> {
+    const client = getSupabaseClient();
+
+    // Se Supabase estiver conectado, envia para o bucket do Storage
+    if (client && isSupabaseConfigured()) {
+      try {
+        const fileExt = file instanceof File && file.name.includes('.') ? file.name.split('.').pop() : 'png';
+        const cleanPath = `${pathName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${fileExt}`;
+
+        const { data, error } = await client.storage
+          .from(bucket)
+          .upload(cleanPath, file, {
+            upsert: true,
+            contentType: file.type || 'image/png',
+          });
+
+        if (error) {
+          console.warn(`Erro no upload para o Supabase Storage (${bucket}):`, error.message);
+        } else if (data?.path) {
+          const { data: { publicUrl } } = client.storage.from(bucket).getPublicUrl(data.path);
+          
+          await auditService.logActivity({
+            action: bucket === 'user-avatars' ? 'UPLOAD_AVATAR' : bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+            entityType: 'storage',
+            entityId: cleanPath,
+            entityName: `${bucket}/${cleanPath}`,
+            details: { bucket, path: cleanPath, publicUrl }
+          });
+
+          return { publicUrl };
+        }
+      } catch (err: any) {
+        console.error('Exceção no upload para o Supabase Storage:', err);
+      }
+    }
+
+    // Fallback: conversão para Data URL (Base64)
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Url = reader.result as string;
+        await auditService.logActivity({
+          action: bucket === 'user-avatars' ? 'UPLOAD_AVATAR' : bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+          entityType: 'storage',
+          entityId: pathName,
+          entityName: `${bucket}/${pathName} (Local Base64)`,
+          details: { bucket, fallback: true }
+        });
+        resolve({ publicUrl: base64Url });
+      };
+      reader.onerror = () => {
+        resolve({ publicUrl: null, error: 'Falha ao converter imagem para base64.' });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 };

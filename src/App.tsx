@@ -362,7 +362,7 @@ export default function App() {
               title="Configurações do Perfil do Especialista (Laudo)"
               className="text-[11px] text-slate-300 hover:text-white hover:underline transition-all"
             >
-              Perfil do Laudo
+              Configuração
             </button>
 
             <button

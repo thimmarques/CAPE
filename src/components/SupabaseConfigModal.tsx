@@ -129,14 +129,14 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   const currentConfig = getStoredSupabaseConfig();
 
   const sqlSchemaText = `-- ==============================================================================
--- SCHEMA SQL - PSYCHORISK ANALYTICS NR-01 (SUPABASE POSTGRESQL)
+-- SCHEMA SQL COMPLETO - PSYCHORISK ANALYTICS NR-01 (SUPABASE POSTGRESQL)
 -- ==============================================================================
 -- Cole este script no "SQL Editor" do seu painel Supabase e clique em "RUN".
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 1. TABELA DE EMPRESAS
+-- 1. TABELA DE EMPRESAS (COMPANIES)
 CREATE TABLE IF NOT EXISTS public.companies (
     id TEXT PRIMARY KEY,
     corporate_name TEXT NOT NULL,
@@ -167,7 +167,23 @@ CREATE TABLE IF NOT EXISTS public.companies (
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 2. TABELA DE SESSÕES / RESPOSTAS DO QUESTIONÁRIO
+-- 2. TABELA DE MODELOS DE QUESTIONÁRIOS (QUESTIONNAIRE_TEMPLATES)
+CREATE TABLE IF NOT EXISTS public.questionnaire_templates (
+    id TEXT PRIMARY KEY DEFAULT 'nr01-psychosocial-v1',
+    code TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    normative_reference TEXT NOT NULL,
+    scale_type TEXT DEFAULT 'likert_4',
+    dimensions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    version TEXT DEFAULT '1.0',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- 3. TABELA DE RESPOSTAS DOS QUESTIONÁRIOS (ASSESSMENT_SESSIONS)
 CREATE TABLE IF NOT EXISTS public.assessment_sessions (
     id TEXT PRIMARY KEY,
     company_id TEXT REFERENCES public.companies(id) ON DELETE CASCADE,
@@ -184,7 +200,32 @@ CREATE TABLE IF NOT EXISTS public.assessment_sessions (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 3. TABELA DE PERFIL DO CONSULTOR
+-- 4. TABELA DE LAUDOS E RELATÓRIOS TÉCNICOS (TECHNICAL_REPORTS)
+CREATE TABLE IF NOT EXISTS public.technical_reports (
+    id TEXT PRIMARY KEY,
+    company_id TEXT REFERENCES public.companies(id) ON DELETE CASCADE,
+    company_name TEXT NOT NULL,
+    campaign_id TEXT,
+    title TEXT NOT NULL,
+    reference_year TEXT,
+    application_period TEXT,
+    issued_date TEXT NOT NULL,
+    author_id TEXT,
+    author_name TEXT,
+    author_council_register TEXT,
+    overall_score NUMERIC(5,2) NOT NULL,
+    overall_favorability NUMERIC(5,2) NOT NULL,
+    overall_risk_level TEXT NOT NULL,
+    adherence_rate NUMERIC(5,2) NOT NULL,
+    total_respondents INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'published' CHECK (status IN ('draft', 'published', 'archived')),
+    analytics_data JSONB NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- 5. TABELA DE PERFIL DO RESPONSÁVEL TÉCNICO (CONSULTANCY_PROFILES)
 CREATE TABLE IF NOT EXISTS public.consultancy_profiles (
     id TEXT PRIMARY KEY DEFAULT 'default-profile',
     name TEXT NOT NULL,
@@ -199,7 +240,7 @@ CREATE TABLE IF NOT EXISTS public.consultancy_profiles (
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 4. TABELA DE USUÁRIOS E PERMISSÕES (RBAC)
+-- 6. TABELA DE PERFIS DE USUÁRIOS E RBAC (USER_PROFILES)
 CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
@@ -210,18 +251,43 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 5. ÍNDICES
+-- 7. TABELA DE AUDITORIA E LOGS DE RASTREABILIDADE (AUDIT_LOGS)
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    user_email TEXT NOT NULL,
+    user_name TEXT,
+    user_role TEXT,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    entity_name TEXT,
+    details JSONB DEFAULT '{}'::jsonb,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- 8. ÍNDICES DE ALTA PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_companies_cnpj ON public.companies(cnpj);
 CREATE INDEX IF NOT EXISTS idx_sessions_company_id ON public.assessment_sessions(company_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_department_id ON public.assessment_sessions(department_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON public.assessment_sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_company_id ON public.technical_reports(company_id);
+CREATE INDEX IF NOT EXISTS idx_reports_created_at ON public.technical_reports(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON public.user_profiles(email);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON public.audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
 
--- 6. SEGURANÇA RLS
+-- 9. SEGURANÇA ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.questionnaire_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assessment_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.technical_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.consultancy_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- POLÍTICAS RLS (Permitir SELECT, INSERT, UPDATE, DELETE para anon/authenticated)
 DROP POLICY IF EXISTS "Public Read Companies" ON public.companies;
@@ -229,10 +295,20 @@ CREATE POLICY "Public Read Companies" ON public.companies FOR SELECT USING (true
 DROP POLICY IF EXISTS "Public Write Companies" ON public.companies;
 CREATE POLICY "Public Write Companies" ON public.companies FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Public Read Templates" ON public.questionnaire_templates;
+CREATE POLICY "Public Read Templates" ON public.questionnaire_templates FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public Write Templates" ON public.questionnaire_templates;
+CREATE POLICY "Public Write Templates" ON public.questionnaire_templates FOR ALL USING (true);
+
 DROP POLICY IF EXISTS "Public Read Sessions" ON public.assessment_sessions;
 CREATE POLICY "Public Read Sessions" ON public.assessment_sessions FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Public Write Sessions" ON public.assessment_sessions;
 CREATE POLICY "Public Write Sessions" ON public.assessment_sessions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public Read Reports" ON public.technical_reports;
+CREATE POLICY "Public Read Reports" ON public.technical_reports FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public Write Reports" ON public.technical_reports;
+CREATE POLICY "Public Write Reports" ON public.technical_reports FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Public Read Profile" ON public.consultancy_profiles;
 CREATE POLICY "Public Read Profile" ON public.consultancy_profiles FOR SELECT USING (true);
@@ -244,7 +320,24 @@ CREATE POLICY "Public Read Users" ON public.user_profiles FOR SELECT USING (true
 DROP POLICY IF EXISTS "Public Write Users" ON public.user_profiles;
 CREATE POLICY "Public Write Users" ON public.user_profiles FOR ALL USING (true);
 
--- 7. SEED DO SUPER ADMIN MASTER
+DROP POLICY IF EXISTS "Public Read Audit" ON public.audit_logs;
+CREATE POLICY "Public Read Audit" ON public.audit_logs FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public Write Audit" ON public.audit_logs;
+CREATE POLICY "Public Write Audit" ON public.audit_logs FOR ALL USING (true);
+
+-- 10. BUCKETS DE STORAGE (FOTOS, LOGOS, ASSINATURAS E RELATÓRIOS)
+INSERT INTO storage.buckets (id, name, public)
+VALUES 
+    ('company-assets', 'company-assets', true),
+    ('user-avatars', 'user-avatars', true),
+    ('signatures', 'signatures', true),
+    ('reports', 'reports', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Allow Public Storage Access" ON storage.objects;
+CREATE POLICY "Allow Public Storage Access" ON storage.objects FOR ALL USING (bucket_id IN ('company-assets', 'user-avatars', 'signatures', 'reports'));
+
+-- 11. SEED DO SUPER ADMIN MASTER
 INSERT INTO public.user_profiles (
     email, name, role
 ) VALUES (

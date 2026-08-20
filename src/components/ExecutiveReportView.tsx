@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Company, AnalyticsReport, ProfessionalProfile } from '../types';
+import { Company, AnalyticsReport, ProfessionalProfile, SavedTechnicalReport } from '../types';
 import { 
   Printer, ArrowLeft, Building2, User, 
   Calendar, CheckCircle2, AlertTriangle, ShieldCheck, 
@@ -13,6 +13,8 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, 
   Cell, ReferenceLine, Legend
 } from 'recharts';
+import { dbService } from '../services/supabaseService';
+import { auditService } from '../services/auditService';
 
 interface ExecutiveReportViewProps {
   company: Company;
@@ -27,6 +29,42 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
 
+  // Persiste o laudo gerado no banco de dados e registra log de emissão
+  useEffect(() => {
+    const persistReport = async () => {
+      try {
+        const reportRecord: SavedTechnicalReport = {
+          id: `rep-${company.id}-${company.referenceYear || new Date().getFullYear()}`,
+          companyId: company.id,
+          companyName: company.tradeName || company.corporateName,
+          title: `Laudo Técnico Pericial de Riscos Psicossociais - NR-01 (${company.tradeName || company.corporateName})`,
+          referenceYear: company.referenceYear || String(new Date().getFullYear()),
+          applicationPeriod: company.applicationPeriod || 'Exercício Corrente',
+          issuedDate: new Date().toISOString().split('T')[0],
+          authorId: profile.id,
+          authorName: profile.name,
+          authorCouncilRegister: profile.councilRegister,
+          overallScore: analytics.overallScore,
+          overallFavorability: analytics.overallFavorability,
+          overallRiskLevel: analytics.overallRiskLevel,
+          adherenceRate: analytics.adherenceRate,
+          totalRespondents: analytics.evaluatedEmployees || analytics.totalEmployees || 0,
+          status: 'published',
+          analyticsData: analytics,
+          notes: 'Laudo gerado e homologado de acordo com a NR-01, MTE e ISO 45003.',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await dbService.saveReport(reportRecord);
+      } catch (err) {
+        console.error('Erro ao auto-persistir laudo técnico:', err);
+      }
+    };
+
+    persistReport();
+  }, [company.id, analytics.overallScore]);
+
   useEffect(() => {
     if (autoPrint) {
       const timer = setTimeout(() => {
@@ -36,7 +74,15 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
     }
   }, [autoPrint]);
 
-  const printViaHiddenIframe = () => {
+  const printViaHiddenIframe = async () => {
+    await auditService.logActivity({
+      action: 'EXPORT_REPORT_PDF',
+      entityType: 'report',
+      entityId: `rep-${company.id}`,
+      entityName: `Impressão Direta - Laudo ${company.tradeName}`,
+      details: { companyId: company.id, method: 'iframe_print' }
+    });
+
     if (!printRef.current) {
       window.print();
       return;
@@ -168,6 +214,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
 
       setPdfProgress('Salvando arquivo...');
       pdf.save(`Laudo_Tecnico_NR01_${cleanCompanyName}.pdf`);
+
+      await auditService.logActivity({
+        action: 'EXPORT_REPORT_PDF',
+        entityType: 'report',
+        entityId: `rep-${company.id}`,
+        entityName: `Download PDF - Laudo ${company.tradeName}`,
+        details: { companyId: company.id, pages: pageElements.length }
+      });
     } catch (error) {
       console.error('Erro na renderização das páginas do PDF:', error);
       printViaHiddenIframe();

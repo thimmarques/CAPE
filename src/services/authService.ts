@@ -1,5 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { AuthUser, SUPER_ADMIN_EMAIL, isSuperAdminEmail } from '../types';
+import { auditService } from './auditService';
 
 const STORAGE_KEY_AUTH_USER = 'psychorisk_auth_user_v1';
 export const SUPER_ADMIN_DEFAULT_PASSWORD = '#Gth14g0m4rqu3sG';
@@ -77,6 +78,15 @@ export const authService = {
           };
 
           this.setLocalUser(authUser);
+          await auditService.logActivity({
+            action: 'LOGIN',
+            entityType: 'auth',
+            entityId: authUser.id,
+            entityName: authUser.email,
+            user: authUser,
+            details: { provider: 'email', method: 'password' }
+          });
+
           return { success: true, user: authUser };
         }
 
@@ -105,6 +115,14 @@ export const authService = {
               provider: 'email',
             };
             this.setLocalUser(authUser);
+            await auditService.logActivity({
+              action: 'LOGIN',
+              entityType: 'auth',
+              entityId: authUser.id,
+              entityName: authUser.email,
+              user: authUser,
+              details: { provider: 'email', method: 'master_super_admin' }
+            });
             return { success: true, user: authUser };
           }
         }
@@ -129,6 +147,14 @@ export const authService = {
         provider: 'email',
       };
       this.setLocalUser(fallbackUser);
+      await auditService.logActivity({
+        action: 'LOGIN',
+        entityType: 'auth',
+        entityId: fallbackUser.id,
+        entityName: fallbackUser.email,
+        user: fallbackUser,
+        details: { provider: 'email', method: 'local_master_super_admin' }
+      });
       return { success: true, user: fallbackUser };
     }
 
@@ -177,6 +203,17 @@ export const authService = {
    * Encerra a sessão do usuário
    */
   async logout(): Promise<void> {
+    const currentUser = this.getLocalUser();
+    if (currentUser) {
+      await auditService.logActivity({
+        action: 'LOGOUT',
+        entityType: 'auth',
+        entityId: currentUser.id,
+        entityName: currentUser.email,
+        user: currentUser,
+      });
+    }
+
     const client = getSupabaseClient();
     if (client) {
       try {
