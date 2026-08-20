@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { CompaniesView } from './components/CompaniesView';
 import { QuestionnairesView } from './components/QuestionnairesView';
 import { ReportsView } from './components/ReportsView';
 import { AssessmentView } from './components/AssessmentView';
 import { ProfileSettingsModal } from './components/ProfileSettingsModal';
+import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { MOCK_COMPANIES, MOCK_SESSIONS, MOCK_PROFILE } from './data/mockData';
 import { Company, AssessmentSession, ProfessionalProfile, RespondentPrefill } from './types';
+import { dbService, getLocalCompanies, getLocalSessions, getLocalProfile } from './services/supabaseService';
+import { isSupabaseConfigured } from './lib/supabase';
 import { 
   LayoutDashboard, 
   Building2, Download, Menu, X, 
-  Layers, LogOut, ShieldCheck
+  Layers, LogOut, ShieldCheck, Database, Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
 
 type AppView = 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment';
@@ -20,16 +23,54 @@ export default function App() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | undefined>();
   const [respondentPrefill, setRespondentPrefill] = useState<RespondentPrefill | undefined>();
   
-  // State for companies, sessions and profile
-  const [companies, setCompanies] = useState<Company[]>(MOCK_COMPANIES);
-  const [recentSessions, setRecentSessions] = useState<AssessmentSession[]>(MOCK_SESSIONS);
-  const [profile, setProfile] = useState<ProfessionalProfile>(MOCK_PROFILE);
+  // State for companies, sessions and profile (initialized with local storage / fallback)
+  const [companies, setCompanies] = useState<Company[]>(getLocalCompanies);
+  const [recentSessions, setRecentSessions] = useState<AssessmentSession[]>(getLocalSessions);
+  const [profile, setProfile] = useState<ProfessionalProfile>(getLocalProfile);
+  const [isLoadingDb, setIsLoadingDb] = useState(false);
+  const [isCloudSyncOnline, setIsCloudSyncOnline] = useState<boolean>(isSupabaseConfigured());
   
   // Modals & UI States
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
+
+  // Initial Load from Supabase (or cached storage)
+  useEffect(() => {
+    const loadCloudData = async () => {
+      if (isSupabaseConfigured()) {
+        setIsLoadingDb(true);
+        try {
+          const conn = await dbService.testConnection();
+          setIsCloudSyncOnline(conn.connected);
+
+          const [cloudCompanies, cloudSessions, cloudProfile] = await Promise.all([
+            dbService.fetchCompanies(),
+            dbService.fetchSessions(),
+            dbService.fetchProfile(),
+          ]);
+
+          if (cloudCompanies && cloudCompanies.length > 0) {
+            setCompanies(cloudCompanies);
+          }
+          if (cloudSessions && cloudSessions.length > 0) {
+            setRecentSessions(cloudSessions);
+          }
+          if (cloudProfile) {
+            setProfile(cloudProfile);
+          }
+        } catch (e) {
+          console.error('Erro ao sincronizar com Supabase:', e);
+          setIsCloudSyncOnline(false);
+        } finally {
+          setIsLoadingDb(false);
+        }
+      }
+    };
+
+    loadCloudData();
+  }, []);
 
   const handleNavigate = (view: AppView, companyId?: string, prefill?: RespondentPrefill) => {
     if (companyId) {
@@ -45,7 +86,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSaveCompany = (company: Company) => {
+  const handleSaveCompany = async (company: Company) => {
     setCompanies(prev => {
       const idx = prev.findIndex(c => c.id === company.id);
       if (idx >= 0) {
@@ -55,14 +96,24 @@ export default function App() {
       }
       return [company, ...prev];
     });
+
+    // Cloud + Local Persistence
+    await dbService.saveCompany(company);
   };
 
-  const handleDeleteCompany = (id: string) => {
+  const handleDeleteCompany = async (id: string) => {
     setCompanies(prev => prev.filter(c => c.id !== id));
+    await dbService.deleteCompany(id);
   };
 
-  const handleSaveSession = (newSession: AssessmentSession) => {
+  const handleSaveSession = async (newSession: AssessmentSession) => {
     setRecentSessions(prev => [newSession, ...prev]);
+    await dbService.saveSession(newSession);
+  };
+
+  const handleSaveProfile = async (updated: ProfessionalProfile) => {
+    setProfile(updated);
+    await dbService.saveProfile(updated);
   };
 
   const getViewTitle = () => {
@@ -169,6 +220,25 @@ export default function App() {
             <Download className={`w-5 h-5 ${currentView === 'reports' ? 'text-white' : 'text-slate-400'}`} />
             <span className="text-xs">Relatórios & Laudos (PDF)</span>
           </button>
+
+          <div className="pt-2">
+            <button 
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-left transition-all text-slate-300 hover:bg-[#2D6A4F]/30 hover:text-white font-medium group border border-[#2D6A4F]/30"
+              title="Configurações e Diagnóstico do Supabase"
+            >
+              <div className="flex items-center gap-2.5">
+                <Database className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span className="text-[11px] font-bold">Banco Supabase</span>
+              </div>
+              <span className="flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${isCloudSyncOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-emerald-300">
+                  {isCloudSyncOnline ? 'Online' : 'Local'}
+                </span>
+              </span>
+            </button>
+          </div>
         </nav>
 
         {/* Bottom Profile & Logout Footer */}
@@ -225,6 +295,31 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {isLoadingDb && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                <RefreshCw size={12} className="animate-spin text-emerald-600" />
+                <span className="text-[11px] font-medium hidden md:inline">Sincronizando Cloud...</span>
+              </div>
+            )}
+
+            <button
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+              title="Clique para ver detalhes do banco Supabase"
+            >
+              {isCloudSyncOnline ? (
+                <>
+                  <Cloud size={14} className="text-emerald-600" />
+                  <span className="font-semibold text-emerald-800 text-[11px]">Supabase Nuvem</span>
+                </>
+              ) : (
+                <>
+                  <CloudOff size={14} className="text-amber-600" />
+                  <span className="font-semibold text-amber-800 text-[11px]">Armazenamento Local</span>
+                </>
+              )}
+            </button>
+
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <ShieldCheck size={14} className="text-[#2D6A4F]" />
               <span className="font-semibold">Conformidade NR-01</span>
@@ -291,8 +386,14 @@ export default function App() {
       <ProfileSettingsModal 
         isOpen={isProfileModalOpen}
         profile={profile}
-        onSaveProfile={(updated) => setProfile(updated)}
+        onSaveProfile={handleSaveProfile}
         onClose={() => setIsProfileModalOpen(false)}
+      />
+
+      {/* Supabase Connection and SQL Schema Modal */}
+      <SupabaseConfigModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
       />
 
       {/* Logout Confirmation Modal */}
