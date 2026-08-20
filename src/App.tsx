@@ -36,39 +36,41 @@ export default function App() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Initial Load from Supabase (or cached storage)
-  useEffect(() => {
-    const loadCloudData = async () => {
-      if (isSupabaseConfigured()) {
-        setIsLoadingDb(true);
-        try {
-          const conn = await dbService.testConnection();
-          setIsCloudSyncOnline(conn.connected);
+  // Initial & Dynamic Load from Supabase (or cached storage)
+  const loadCloudData = async () => {
+    if (isSupabaseConfigured()) {
+      setIsLoadingDb(true);
+      try {
+        const conn = await dbService.testConnection();
+        setIsCloudSyncOnline(conn.connected);
 
-          const [cloudCompanies, cloudSessions, cloudProfile] = await Promise.all([
-            dbService.fetchCompanies(),
-            dbService.fetchSessions(),
-            dbService.fetchProfile(),
-          ]);
+        const [cloudCompanies, cloudSessions, cloudProfile] = await Promise.all([
+          dbService.fetchCompanies(),
+          dbService.fetchSessions(),
+          dbService.fetchProfile(),
+        ]);
 
-          if (cloudCompanies && cloudCompanies.length > 0) {
-            setCompanies(cloudCompanies);
-          }
-          if (cloudSessions && cloudSessions.length > 0) {
-            setRecentSessions(cloudSessions);
-          }
-          if (cloudProfile) {
-            setProfile(cloudProfile);
-          }
-        } catch (e) {
-          console.error('Erro ao sincronizar com Supabase:', e);
-          setIsCloudSyncOnline(false);
-        } finally {
-          setIsLoadingDb(false);
+        if (cloudCompanies && cloudCompanies.length > 0) {
+          setCompanies(cloudCompanies);
         }
+        if (cloudSessions && cloudSessions.length > 0) {
+          setRecentSessions(cloudSessions);
+        }
+        if (cloudProfile) {
+          setProfile(cloudProfile);
+        }
+      } catch (e) {
+        console.error('Erro ao sincronizar com Supabase:', e);
+        setIsCloudSyncOnline(false);
+      } finally {
+        setIsLoadingDb(false);
       }
-    };
+    } else {
+      setIsCloudSyncOnline(false);
+    }
+  };
 
+  useEffect(() => {
     loadCloudData();
   }, []);
 
@@ -394,6 +396,7 @@ export default function App() {
       <SupabaseConfigModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
+        onConfigUpdated={loadCloudData}
       />
 
       {/* Logout Confirmation Modal */}

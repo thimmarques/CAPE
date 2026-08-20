@@ -15,13 +15,14 @@ import {
 interface SupabaseConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onConfigUpdated?: () => void;
 }
 
-export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen, onClose }) => {
+export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen, onClose, onConfigUpdated }) => {
   const [isChecking, setIsChecking] = useState(false);
   const [status, setStatus] = useState<{ connected: boolean; message: string; latencyMs?: number } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'credentials' | 'sql' | 'guide'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'credentials' | 'vercel' | 'sql' | 'guide'>('status');
 
   const [inputUrl, setInputUrl] = useState('');
   const [inputKey, setInputKey] = useState('');
@@ -63,8 +64,11 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
     setIsSavedSuccess(true);
     setTimeout(() => setIsSavedSuccess(false), 2500);
     
-    // Automatically re-test connection
+    // Automatically re-test connection and notify parent
     await checkConnection();
+    if (onConfigUpdated) {
+      onConfigUpdated();
+    }
   };
 
   const handleClearCredentials = async () => {
@@ -72,6 +76,9 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
       clearCustomSupabaseConfig();
       loadCurrentCredentials();
       await checkConnection();
+      if (onConfigUpdated) {
+        onConfigUpdated();
+      }
     }
   };
 
@@ -227,7 +234,18 @@ CREATE POLICY "Public Write Profile" ON public.consultancy_profiles FOR ALL USIN
             }`}
           >
             <KeyRound size={16} />
-            Configurar Chaves (URL / Key)
+            Inserir Chaves (Navegador)
+          </button>
+          <button
+            onClick={() => setActiveTab('vercel')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors shrink-0 ${
+              activeTab === 'vercel'
+                ? 'border-emerald-600 text-emerald-700 bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ExternalLink size={16} />
+            Publicar no Vercel
           </button>
           <button
             onClick={() => setActiveTab('sql')}
@@ -428,6 +446,62 @@ CREATE POLICY "Public Write Profile" ON public.consultancy_profiles FOR ALL USIN
                 </button>
               </div>
             </form>
+          )}
+
+          {activeTab === 'vercel' && (
+            <div className="space-y-4 text-xs text-slate-700 leading-relaxed">
+              <div className="p-4 bg-slate-900 text-white rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <ExternalLink size={16} />
+                  Por que no Vercel precisa configurar as Environment Variables?
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  O Vercel compila a aplicação no servidor dele quando você envia para o GitHub. Para que o site em produção acesse o Supabase automaticamente para todos os usuários, adicione as 2 variáveis no painel da Vercel.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-800 text-xs">Passo a Passo no Vercel (2 Minutos):</h4>
+                <ol className="space-y-3 list-decimal pl-4">
+                  <li className="space-y-1">
+                    <strong>Acessar o Projeto no Vercel:</strong>
+                    <p className="text-slate-600">Acesse <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="text-emerald-700 font-bold underline inline-flex items-center gap-1">vercel.com/dashboard <ExternalLink size={12} /></a> e clique no seu projeto.</p>
+                  </li>
+
+                  <li className="space-y-1.5">
+                    <strong>Ir em Settings &gt; Environment Variables:</strong>
+                    <p className="text-slate-600">Adicione as duas variáveis abaixo:</p>
+                    <div className="space-y-2 pt-1 font-mono text-[11px]">
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-500 font-sans block text-[10px]">Key 1:</span>
+                          <span className="font-bold text-slate-800 select-all">VITE_SUPABASE_URL</span>
+                        </div>
+                        <span className="text-slate-500 text-[10px] font-sans">URL do seu Supabase</span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-500 font-sans block text-[10px]">Key 2:</span>
+                          <span className="font-bold text-slate-800 select-all">VITE_SUPABASE_ANON_KEY</span>
+                        </div>
+                        <span className="text-slate-500 text-[10px] font-sans">Chave Anon Public</span>
+                      </div>
+                    </div>
+                  </li>
+
+                  <li className="space-y-1">
+                    <strong>Fazer um Redeploy no Vercel:</strong>
+                    <p className="text-slate-600">
+                      Vá na aba <strong>Deployments</strong> do Vercel, clique nos <strong>3 pontinhos (...)</strong> ao lado do último deploy e selecione <strong>Redeploy</strong>.
+                    </p>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-[11px]">
+                💡 <strong>Dica Rápida:</strong> Enquanto você não faz o redeploy no Vercel, você pode simplesmente abrir o site no Vercel, clicar em <strong>"Banco Supabase" &gt; "Inserir Chaves"</strong> e salvar direto pelo seu navegador!
+              </div>
+            </div>
           )}
 
           {activeTab === 'sql' && (
