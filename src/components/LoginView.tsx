@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
 import { 
   ShieldCheck, Lock, Mail, Eye, EyeOff, LogIn, 
-  AlertCircle, CheckCircle2, Crown, Sparkles, Building2,
-  FileCheck2, Database
+  AlertCircle, Building2, FileCheck2
 } from 'lucide-react';
-import { authService, SUPER_ADMIN_DEFAULT_PASSWORD } from '../services/authService';
-import { AuthUser, SUPER_ADMIN_EMAIL } from '../types';
+import { authService } from '../services/authService';
+import { AuthUser } from '../types';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthUser) => void;
-  onOpenSupabaseModal?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenSupabaseModal }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -65,12 +63,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenSupa
       setErrorMessage(e?.message || 'Erro ao conectar com Google.');
       setIsGoogleLoading(false);
     }
-  };
-
-  const handleFillSuperAdmin = () => {
-    setEmail(SUPER_ADMIN_EMAIL);
-    setPassword(SUPER_ADMIN_DEFAULT_PASSWORD);
-    setErrorMessage(null);
   };
 
   return (
@@ -176,7 +168,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenSupa
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="thibasss@gmail.com"
+                  placeholder="Digite seu email"
                   required
                   className="w-full pl-10 pr-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                 />
@@ -224,48 +216,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenSupa
             </button>
           </form>
 
-          {/* Quick Super Admin Fill Shortcut */}
-          <div className="pt-2 border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={handleFillSuperAdmin}
-              className="w-full p-2.5 bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-800/40 rounded-xl text-left flex items-center justify-between transition-colors group"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Crown size={14} />
-                </div>
-                <div>
-                  <div className="text-[11px] font-bold text-emerald-300 group-hover:text-emerald-200">
-                    Acesso Master Super Admin
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono">
-                    thibasss@gmail.com
-                  </div>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-700/50">
-                Preencher
-              </span>
-            </button>
-          </div>
-
           {/* Database Status Tag */}
-          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+          <div className="flex items-center justify-center text-[11px] text-slate-500 pt-1">
             <span className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${isCloudActive ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               {isCloudActive ? 'Supabase Conectado' : 'Modo Local Ativo'}
             </span>
-            {onOpenSupabaseModal && (
-              <button
-                type="button"
-                onClick={onOpenSupabaseModal}
-                className="text-slate-400 hover:text-slate-300 flex items-center gap-1 underline text-[10px]"
-              >
-                <Database size={11} />
-                Configurar Banco
-              </button>
-            )}
           </div>
 
         </div>

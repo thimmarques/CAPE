@@ -192,22 +192,12 @@ export default function App() {
   // Not logged in -> Show Login View
   if (!currentUser) {
     return (
-      <>
-        <LoginView 
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-            loadCloudData();
-          }}
-          onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
-        />
-        <SupabaseConfigModal
-          isOpen={isSupabaseModalOpen}
-          onClose={() => setIsSupabaseModalOpen(false)}
-          onConfigUpdated={loadCloudData}
-          isSuperAdmin={false}
-          currentUserEmail=""
-        />
-      </>
+      <LoginView 
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          loadCloudData();
+        }}
+      />
     );
   }
 
