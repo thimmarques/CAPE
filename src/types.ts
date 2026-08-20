@@ -1,6 +1,26 @@
 export type RiskLevel = 'low' | 'moderate' | 'high';
 export type FavorabilityLevel = 'favorable' | 'warning' | 'critical'; // Favorável (>=67), Atenção (40-66), Crítico (<40)
 
+export type UserRole = 'super_admin' | 'admin' | 'consultant' | 'evaluator';
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  avatarUrl?: string;
+  isSuperAdmin: boolean;
+  provider?: 'email' | 'google';
+  createdAt?: string;
+}
+
+export const SUPER_ADMIN_EMAIL = 'thibasss@gmail.com';
+
+export const isSuperAdminEmail = (email?: string | null): boolean => {
+  if (!email) return false;
+  return email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase();
+};
+
 export interface ProfessionalProfile {
   id: string;
   name: string;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, CheckCircle2, AlertCircle, RefreshCw, 
   Copy, Check, Code2, ExternalLink, X, ShieldCheck, Terminal,
-  KeyRound, Globe, Save, Trash2, CheckCircle
+  KeyRound, Globe, Save, Trash2, CheckCircle, Lock, Crown
 } from 'lucide-react';
 import { dbService } from '../services/supabaseService';
 import { 
@@ -11,14 +11,23 @@ import {
   saveCustomSupabaseConfig, 
   clearCustomSupabaseConfig 
 } from '../lib/supabase';
+import { SUPER_ADMIN_EMAIL } from '../types';
 
 interface SupabaseConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfigUpdated?: () => void;
+  isSuperAdmin?: boolean;
+  currentUserEmail?: string;
 }
 
-export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen, onClose, onConfigUpdated }) => {
+export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onConfigUpdated,
+  isSuperAdmin = true,
+  currentUserEmail = '',
+}) => {
   const [isChecking, setIsChecking] = useState(false);
   const [status, setStatus] = useState<{ connected: boolean; message: string; latencyMs?: number } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -27,6 +36,8 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
   const [inputUrl, setInputUrl] = useState('');
   const [inputKey, setInputKey] = useState('');
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
+
+  const canAccessConfig = isSuperAdmin || currentUserEmail.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase();
 
   const loadCurrentCredentials = () => {
     const config = getStoredSupabaseConfig();
@@ -84,6 +95,37 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
+  if (!canAccessConfig) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
+            <Lock size={28} />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-slate-800">Acesso Restrito ao Administrador Geral</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              As configurações do banco de dados e credenciais do Supabase são de acesso exclusivo do <strong>Super Admin Master</strong> ({SUPER_ADMIN_EMAIL}).
+            </p>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 text-left space-y-1">
+            <div className="font-bold text-slate-700 flex items-center gap-1">
+              <Crown size={12} className="text-amber-500" /> Nível de Acesso Atual
+            </div>
+            <div>Usuário: {currentUserEmail || 'Não identificado'}</div>
+            <div>Permissão: Administrador Operacional / Consultor</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const currentConfig = getStoredSupabaseConfig();
 
   const sqlSchemaText = `-- ==============================================================================
@@ -92,6 +134,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
 -- Cole este script no "SQL Editor" do seu painel Supabase e clique em "RUN".
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 1. TABELA DE EMPRESAS
 CREATE TABLE IF NOT EXISTS public.companies (
@@ -156,16 +199,29 @@ CREATE TABLE IF NOT EXISTS public.consultancy_profiles (
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 4. ÍNDICES
+-- 4. TABELA DE USUÁRIOS E PERMISSÕES (RBAC)
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'consultant', 'evaluator')),
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- 5. ÍNDICES
 CREATE INDEX IF NOT EXISTS idx_companies_cnpj ON public.companies(cnpj);
 CREATE INDEX IF NOT EXISTS idx_sessions_company_id ON public.assessment_sessions(company_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_department_id ON public.assessment_sessions(department_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON public.assessment_sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON public.user_profiles(email);
 
--- 5. SEGURANÇA RLS
+-- 6. SEGURANÇA RLS
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assessment_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.consultancy_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- POLÍTICAS RLS (Permitir SELECT, INSERT, UPDATE, DELETE para anon/authenticated)
 DROP POLICY IF EXISTS "Public Read Companies" ON public.companies;
@@ -181,7 +237,21 @@ CREATE POLICY "Public Write Sessions" ON public.assessment_sessions FOR ALL USIN
 DROP POLICY IF EXISTS "Public Read Profile" ON public.consultancy_profiles;
 CREATE POLICY "Public Read Profile" ON public.consultancy_profiles FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Public Write Profile" ON public.consultancy_profiles;
-CREATE POLICY "Public Write Profile" ON public.consultancy_profiles FOR ALL USING (true);`;
+CREATE POLICY "Public Write Profile" ON public.consultancy_profiles FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public Read Users" ON public.user_profiles;
+CREATE POLICY "Public Read Users" ON public.user_profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public Write Users" ON public.user_profiles;
+CREATE POLICY "Public Write Users" ON public.user_profiles FOR ALL USING (true);
+
+-- 7. SEED DO SUPER ADMIN MASTER
+INSERT INTO public.user_profiles (
+    email, name, role
+) VALUES (
+    'thibasss@gmail.com',
+    'Thiago Marques (Super Admin)',
+    'super_admin'
+) ON CONFLICT (email) DO UPDATE SET role = 'super_admin';`;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(sqlSchemaText);

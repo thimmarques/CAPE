@@ -6,19 +6,25 @@ import { ReportsView } from './components/ReportsView';
 import { AssessmentView } from './components/AssessmentView';
 import { ProfileSettingsModal } from './components/ProfileSettingsModal';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
+import { LoginView } from './components/LoginView';
 import { MOCK_COMPANIES, MOCK_SESSIONS, MOCK_PROFILE } from './data/mockData';
-import { Company, AssessmentSession, ProfessionalProfile, RespondentPrefill } from './types';
+import { Company, AssessmentSession, ProfessionalProfile, RespondentPrefill, AuthUser, isSuperAdminEmail } from './types';
 import { dbService, getLocalCompanies, getLocalSessions, getLocalProfile } from './services/supabaseService';
+import { authService } from './services/authService';
 import { isSupabaseConfigured } from './lib/supabase';
 import { 
   LayoutDashboard, 
   Building2, Download, Menu, X, 
-  Layers, LogOut, ShieldCheck, Database, Cloud, CloudOff, RefreshCw
+  Layers, LogOut, ShieldCheck, Database, Cloud, CloudOff, RefreshCw,
+  Crown, UserCheck, Lock
 } from 'lucide-react';
 
 type AppView = 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | undefined>();
   const [respondentPrefill, setRespondentPrefill] = useState<RespondentPrefill | undefined>();
@@ -35,6 +41,33 @@ export default function App() {
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Initial Check for Authenticated User & Session Listener
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        setCurrentUser(user);
+      } catch (e) {
+        console.error('Erro ao restaurar sessão de usuário:', e);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+
+    initAuth();
+
+    const authSub = authService.onAuthStateChange((user) => {
+      setCurrentUser(user);
+      if (user) {
+        loadCloudData();
+      }
+    });
+
+    return () => {
+      authSub.unsubscribe();
+    };
+  }, []);
 
   // Initial & Dynamic Load from Supabase (or cached storage)
   const loadCloudData = async () => {
@@ -71,8 +104,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadCloudData();
-  }, []);
+    if (currentUser) {
+      loadCloudData();
+    }
+  }, [currentUser]);
+
+  const handleLogout = async () => {
+    await authService.logout();
+    setCurrentUser(null);
+    setIsLogoutModalOpen(false);
+  };
 
   const handleNavigate = (view: AppView, companyId?: string, prefill?: RespondentPrefill) => {
     if (companyId) {
@@ -128,6 +169,49 @@ export default function App() {
       default: return 'PsychoRisk Analytics';
     }
   };
+
+  // Loading Screen while verifying Auth
+  if (isAuthLoading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#1A392A] text-white">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="w-16 h-16 bg-[#40916C] rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-xl animate-pulse">
+            P
+          </div>
+          <div className="text-center space-y-1">
+            <h2 className="text-lg font-bold tracking-tight">PsychoRisk Analytics NR-01</h2>
+            <p className="text-xs text-[#52B788] flex items-center justify-center gap-2">
+              <RefreshCw size={12} className="animate-spin" /> Verificando autenticação e permissões...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in -> Show Login View
+  if (!currentUser) {
+    return (
+      <>
+        <LoginView 
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            loadCloudData();
+          }}
+          onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+        />
+        <SupabaseConfigModal
+          isOpen={isSupabaseModalOpen}
+          onClose={() => setIsSupabaseModalOpen(false)}
+          onConfigUpdated={loadCloudData}
+          isSuperAdmin={false}
+          currentUserEmail=""
+        />
+      </>
+    );
+  }
+
+  const isSuperAdmin = currentUser.isSuperAdmin || isSuperAdminEmail(currentUser.email);
 
   return (
     <div className="flex h-screen font-sans text-[#1E293B] bg-[#F8FAFC] overflow-hidden">
@@ -223,54 +307,83 @@ export default function App() {
             <span className="text-xs">Relatórios & Laudos (PDF)</span>
           </button>
 
-          <div className="pt-2">
-            <button 
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-left transition-all text-slate-300 hover:bg-[#2D6A4F]/30 hover:text-white font-medium group border border-[#2D6A4F]/30"
-              title="Configurações e Diagnóstico do Supabase"
-            >
-              <div className="flex items-center gap-2.5">
-                <Database className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span className="text-[11px] font-bold">Banco Supabase</span>
-              </div>
-              <span className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${isCloudSyncOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                <span className="text-[9px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-emerald-300">
-                  {isCloudSyncOnline ? 'Online' : 'Local'}
+          {/* Supabase Config Button - ONLY FOR SUPER ADMIN */}
+          {isSuperAdmin && (
+            <div className="pt-2">
+              <button 
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-left transition-all text-amber-200 bg-amber-950/30 hover:bg-amber-900/40 font-medium group border border-amber-500/30"
+                title="Acesso Exclusivo Super Admin: Configurações do Supabase"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Database className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[11px] font-bold">Banco Supabase</span>
+                </div>
+                <span className="flex items-center gap-1">
+                  <Crown size={12} className="text-amber-400" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300">
+                    Master
+                  </span>
                 </span>
-              </span>
-            </button>
-          </div>
+              </button>
+            </div>
+          )}
         </nav>
 
-        {/* Bottom Profile & Logout Footer */}
-        <div className="p-3 m-3 rounded-2xl bg-[#142D22] border border-[#2D6A4F]/40 flex items-center justify-between gap-2 shadow-xs">
-          <button 
-            onClick={() => setIsProfileModalOpen(true)}
-            title="Configurações do Perfil Profissional"
-            className="flex-1 flex items-center gap-2.5 min-w-0 p-1.5 rounded-xl hover:bg-[#2D6A4F]/40 text-left transition-all group"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#2D6A4F] text-white flex items-center justify-center font-bold text-xs shrink-0 border border-[#52B788]/40 shadow-xs">
-              {profile.name ? profile.name.charAt(0) : 'R'}
-            </div>
+        {/* Bottom Profile & Authenticated User Info */}
+        <div className="p-3 m-3 rounded-2xl bg-[#142D22] border border-[#2D6A4F]/40 space-y-2 shadow-xs">
+          
+          {/* User Account Info */}
+          <div className="flex items-center gap-2.5 p-1.5 rounded-xl bg-[#1a392a]/80 border border-[#2D6A4F]/30">
+            {currentUser.avatarUrl ? (
+              <img 
+                src={currentUser.avatarUrl} 
+                alt={currentUser.name} 
+                className="w-8 h-8 rounded-full object-cover border border-[#52B788]/40 shrink-0" 
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#2D6A4F] text-white flex items-center justify-center font-bold text-xs shrink-0 border border-[#52B788]/40 shadow-xs">
+                {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-white truncate group-hover:text-[#52B788] transition-colors">
-                {profile.name}
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                {currentUser.name}
               </div>
-              <div className="text-[10px] text-slate-400 truncate">
-                {profile.role || 'Responsável Técnico'}
+              <div className="text-[10px] text-[#52B788] truncate font-medium flex items-center gap-1">
+                {isSuperAdmin ? (
+                  <>
+                    <Crown size={10} className="text-amber-400 shrink-0" />
+                    <span>Super Admin Master</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={10} className="text-emerald-400 shrink-0" />
+                    <span>Administrador</span>
+                  </>
+                )}
               </div>
             </div>
-          </button>
+          </div>
 
-          <button
-            onClick={() => setIsLogoutModalOpen(true)}
-            title="Sair do Sistema"
-            className="p-2 text-slate-400 hover:text-red-300 hover:bg-red-500/20 rounded-xl transition-all shrink-0"
-            aria-label="Sair do Sistema"
-          >
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#2D6A4F]/20">
+            <button 
+              onClick={() => setIsProfileModalOpen(true)}
+              title="Configurações do Perfil do Especialista (Laudo)"
+              className="text-[11px] text-slate-300 hover:text-white hover:underline transition-all"
+            >
+              Perfil do Laudo
+            </button>
+
+            <button
+              onClick={() => setIsLogoutModalOpen(true)}
+              title="Sair do Sistema"
+              className="p-1.5 text-slate-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-all flex items-center gap-1 text-[11px]"
+              aria-label="Sair do Sistema"
+            >
+              <LogOut size={14} /> Sair
+            </button>
+          </div>
         </div>
 
       </aside>
@@ -304,23 +417,43 @@ export default function App() {
               </div>
             )}
 
-            <button
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
-              title="Clique para ver detalhes do banco Supabase"
-            >
-              {isCloudSyncOnline ? (
-                <>
-                  <Cloud size={14} className="text-emerald-600" />
-                  <span className="font-semibold text-emerald-800 text-[11px]">Supabase Nuvem</span>
-                </>
-              ) : (
-                <>
-                  <CloudOff size={14} className="text-amber-600" />
-                  <span className="font-semibold text-amber-800 text-[11px]">Armazenamento Local</span>
-                </>
-              )}
-            </button>
+            {/* Cloud Status Badge - Clicking opens Supabase only for Super Admin */}
+            {isSuperAdmin ? (
+              <button
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                title="Super Admin: Clique para gerenciar o Supabase"
+              >
+                {isCloudSyncOnline ? (
+                  <>
+                    <Cloud size={14} className="text-emerald-600" />
+                    <span className="font-semibold text-emerald-800 text-[11px]">Supabase Conectado</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff size={14} className="text-amber-600" />
+                    <span className="font-semibold text-amber-800 text-[11px]">Armazenamento Local</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <div
+                className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border bg-slate-50 border-slate-200 text-slate-700"
+                title="Status de Conexão com a Nuvem"
+              >
+                {isCloudSyncOnline ? (
+                  <>
+                    <Cloud size={14} className="text-emerald-600" />
+                    <span className="font-semibold text-emerald-800 text-[11px]">Nuvem Ativa</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff size={14} className="text-amber-600" />
+                    <span className="font-semibold text-amber-800 text-[11px]">Modo Local</span>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
               <ShieldCheck size={14} className="text-[#2D6A4F]" />
@@ -392,11 +525,13 @@ export default function App() {
         onClose={() => setIsProfileModalOpen(false)}
       />
 
-      {/* Supabase Connection and SQL Schema Modal */}
+      {/* Supabase Connection and SQL Schema Modal (Guarded for Super Admin) */}
       <SupabaseConfigModal
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
         onConfigUpdated={loadCloudData}
+        isSuperAdmin={isSuperAdmin}
+        currentUserEmail={currentUser.email}
       />
 
       {/* Logout Confirmation Modal */}
@@ -409,12 +544,12 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Sair do Sistema</h3>
-                <p className="text-xs text-slate-500">Deseja realmente encerrar sua sessão de trabalho?</p>
+                <p className="text-xs text-slate-500">Deseja realmente encerrar a sessão de <strong>{currentUser.email}</strong>?</p>
               </div>
             </div>
 
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed">
-              Todos os dados de empresas, questionários aplicados e laudos executivos já registrados na plataforma permanecem salvos com segurança.
+              Todos os dados e laudos registrados na plataforma permanecem sincronizados e salvos com segurança.
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
@@ -427,10 +562,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setIsLogoutModalOpen(false);
-                  handleNavigate('dashboard');
-                }}
+                onClick={handleLogout}
                 className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
                 <LogOut size={14} /> Confirmar e Sair
