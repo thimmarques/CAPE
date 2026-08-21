@@ -31,7 +31,8 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
   const [isChecking, setIsChecking] = useState(false);
   const [status, setStatus] = useState<{ connected: boolean; message: string; latencyMs?: number } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'credentials' | 'vercel' | 'sql' | 'guide'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'credentials' | 'oauth' | 'vercel' | 'sql' | 'guide'>('status');
+  const [copiedRedirectUrl, setCopiedRedirectUrl] = useState(false);
 
   const [inputUrl, setInputUrl] = useState('');
   const [inputKey, setInputKey] = useState('');
@@ -403,6 +404,17 @@ INSERT INTO public.user_profiles (
             Inserir Chaves (Navegador)
           </button>
           <button
+            onClick={() => setActiveTab('oauth')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors shrink-0 ${
+              activeTab === 'oauth'
+                ? 'border-emerald-600 text-emerald-700 bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck size={16} />
+            Login Google & Redirects
+          </button>
+          <button
             onClick={() => setActiveTab('vercel')}
             className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors shrink-0 ${
               activeTab === 'vercel'
@@ -612,6 +624,84 @@ INSERT INTO public.user_profiles (
                 </button>
               </div>
             </form>
+          )}
+
+          {activeTab === 'oauth' && (
+            <div className="space-y-4 text-xs text-slate-700 leading-relaxed">
+              <div className="p-4 bg-slate-900 text-white rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <ShieldCheck size={16} />
+                  Por que o login do Google redirecionou para o Vercel?
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Por segurança, o <strong>Supabase Auth</strong> só permite redirecionar o usuário após o login com Google para URLs explicitamente cadastradas na lista <strong>Redirect URLs</strong>. Se a URL atual não estiver na lista, o Supabase rejeita e redireciona para a <strong>Site URL padrão</strong> configurada no projeto (que é o seu endereço na Vercel).
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-slate-800 text-xs">Como fazer o Login com Google ir direto para o Sistema:</h4>
+                <ol className="space-y-3 list-decimal pl-4">
+                  <li className="space-y-1">
+                    <strong>Acesse o Supabase Dashboard:</strong>
+                    <p className="text-slate-600">
+                      Abra o painel do seu projeto em <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-emerald-700 font-bold underline inline-flex items-center gap-1">supabase.com/dashboard <ExternalLink size={12} /></a>.
+                    </p>
+                  </li>
+
+                  <li className="space-y-1.5">
+                    <strong>Vá em Authentication &gt; URL Configuration:</strong>
+                    <p className="text-slate-600">No menu lateral esquerdo, clique em <strong>Authentication</strong> e depois em <strong>URL Configuration</strong>.</p>
+                  </li>
+
+                  <li className="space-y-2">
+                    <strong>Adicione a URL deste ambiente em "Redirect URLs":</strong>
+                    <p className="text-slate-600">Clique em <strong>Add URL</strong> e cole a URL abaixo (com wildcard <code>/**</code>):</p>
+                    
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 font-mono text-[11px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-slate-800 truncate select-all">{typeof window !== 'undefined' ? `${window.location.origin}/**` : 'URL Atual/**'}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/**`);
+                            setCopiedRedirectUrl(true);
+                            setTimeout(() => setCopiedRedirectUrl(false), 2000);
+                          }}
+                          className="px-2.5 py-1 bg-[#2D6A4F] hover:bg-[#1f4a37] text-white text-[10px] font-bold rounded-lg shrink-0 flex items-center gap-1 transition-colors"
+                        >
+                          {copiedRedirectUrl ? <Check size={12} /> : <Copy size={12} />}
+                          {copiedRedirectUrl ? 'Copiado!' : 'Copiar URL'}
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+
+                  <li className="space-y-1">
+                    <strong>Lista Recomendada de Redirect URLs no Supabase:</strong>
+                    <p className="text-slate-600">Recomendamos cadastrar as seguintes URLs para cobrir todos os seus ambientes:</p>
+                    <ul className="list-disc pl-4 space-y-1 text-[11px] font-mono text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <li><code>https://*.run.app/**</code> (Ambientes Google AI Studio / Cloud Run)</li>
+                      <li><code>https://*.vercel.app/**</code> (Ambientes Vercel de Produção e Preview)</li>
+                      <li><code>http://localhost:3000/**</code> (Desenvolvimento Local)</li>
+                    </ul>
+                  </li>
+
+                  <li className="space-y-1">
+                    <strong>Salvar as Alterações:</strong>
+                    <p className="text-slate-600">Clique em <strong>Save</strong> no rodapé da página do Supabase.</p>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-[11px] space-y-1">
+                <p>
+                  ✅ <strong>Pronto!</strong> Assim que as URLs estiverem salvas no Supabase, ao clicar em <em>"Entrar com Gmail / Google"</em>, a autenticação retornará <strong>diretamente para o sistema com seu perfil logado</strong>, sem pedir login na Vercel ou sair da tela!
+                </p>
+                <p className="text-[10px] text-emerald-700">
+                  <em>Dica:</em> Você também pode acessar diretamente via e-mail e senha utilizando <strong>{SUPER_ADMIN_EMAIL}</strong> e sua senha master.
+                </p>
+              </div>
+            </div>
           )}
 
           {activeTab === 'vercel' && (
