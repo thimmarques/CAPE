@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Company, AnalyticsReport, ProfessionalProfile, SavedTechnicalReport } from '../types';
+import { Company, AnalyticsReport, ProfessionalProfile, SavedTechnicalReport, StoredFileItem, StorageBucketName } from '../types';
 import { 
   Printer, ArrowLeft, Building2, User, 
   Calendar, CheckCircle2, AlertTriangle, ShieldCheck, 
   FileText, Award, Layers, BarChart2, TrendingUp, AlertOctagon, HelpCircle,
-  Download, Info, Loader2, Check
+  Download, Info, Loader2, Check, Image as ImageIcon, UploadCloud, Trash2, 
+  RefreshCw, X, Search, CheckCircle, ExternalLink, Sparkles
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -22,12 +23,111 @@ interface ExecutiveReportViewProps {
   profile: ProfessionalProfile;
   autoPrint?: boolean;
   onBack: () => void;
+  onUpdateProfile?: (updated: ProfessionalProfile) => void;
 }
 
-export function ExecutiveReportView({ company, analytics, profile, autoPrint, onBack }: ExecutiveReportViewProps) {
+export function ExecutiveReportView({ company, analytics, profile, autoPrint, onBack, onUpdateProfile }: ExecutiveReportViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
+
+  // Logotipo configurado para o laudo (busca da galeria / perfil)
+  const [reportLogoUrl, setReportLogoUrl] = useState<string>(() => profile.consultancyLogoUrl || '');
+  
+  // Modal da Galeria de Imagens
+  const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
+  const [galleryFiles, setGalleryFiles] = useState<StoredFileItem[]>([]);
+  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [galleryFilter, setGalleryFilter] = useState<'all' | 'company-assets' | 'reports'>('all');
+  const [gallerySearch, setGallerySearch] = useState('');
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+  // Carrega arquivos da galeria
+  const loadGalleryFiles = async () => {
+    setIsLoadingGallery(true);
+    try {
+      const files = await dbService.listUploadedFiles();
+      setGalleryFiles(files);
+    } catch (err) {
+      console.error('Erro ao carregar arquivos da galeria:', err);
+    } finally {
+      setIsLoadingGallery(false);
+    }
+  };
+
+  const handleOpenGalleryModal = () => {
+    setIsGalleryModalOpen(true);
+    loadGalleryFiles();
+  };
+
+  const handleSelectLogoFromGallery = async (url: string) => {
+    setReportLogoUrl(url);
+    const updatedProfile: ProfessionalProfile = {
+      ...profile,
+      consultancyLogoUrl: url
+    };
+    try {
+      await dbService.saveProfile(updatedProfile);
+      onUpdateProfile?.(updatedProfile);
+      setSaveSuccessMsg('Logotipo atualizado e salvo no laudo!');
+      setTimeout(() => {
+        setSaveSuccessMsg('');
+        setIsGalleryModalOpen(false);
+      }, 900);
+    } catch (err) {
+      console.error('Erro ao salvar logotipo no perfil:', err);
+    }
+  };
+
+  const handleUploadNewLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const cleanFileName = `logo-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const res = await dbService.uploadImage('company-assets', file, cleanFileName);
+
+      if (res.publicUrl) {
+        setReportLogoUrl(res.publicUrl);
+        const updatedProfile: ProfessionalProfile = {
+          ...profile,
+          consultancyLogoUrl: res.publicUrl
+        };
+        await dbService.saveProfile(updatedProfile);
+        onUpdateProfile?.(updatedProfile);
+        await loadGalleryFiles();
+        setSaveSuccessMsg('Novo logotipo enviado e aplicado com sucesso!');
+        setTimeout(() => {
+          setSaveSuccessMsg('');
+          setIsGalleryModalOpen(false);
+        }, 1000);
+      }
+    } catch (err) {
+      console.error('Erro ao fazer upload do logotipo:', err);
+    } finally {
+      setIsUploadingLogo(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    setReportLogoUrl('');
+    const updatedProfile: ProfessionalProfile = {
+      ...profile,
+      consultancyLogoUrl: ''
+    };
+    try {
+      await dbService.saveProfile(updatedProfile);
+      onUpdateProfile?.(updatedProfile);
+      setIsGalleryModalOpen(false);
+    } catch (err) {
+      console.error('Erro ao remover logotipo:', err);
+    }
+  };
 
   // Persiste o laudo gerado no banco de dados e registra log de emissão
   useEffect(() => {
@@ -174,27 +274,22 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
         // Render each A4 page individually with high resolution and crisp natural font rendering
         const dataUrl = await toPng(pageEl, {
           quality: 0.98,
-          pixelRatio: 2.5,
+          pixelRatio: 2.2,
           backgroundColor: '#ffffff',
           cacheBust: true,
           fontEmbedCSS: '',
           width: 794,
           height: 1123,
-          canvasWidth: 1985,
-          canvasHeight: 2808,
+          canvasWidth: 1747,
+          canvasHeight: 2471,
           style: {
             margin: '0',
-            marginLeft: '0',
-            marginRight: '0',
-            marginTop: '0',
-            marginBottom: '0',
-            padding: '32px 32px',
+            padding: '24px 28px',
             width: '794px',
             minWidth: '794px',
             maxWidth: '794px',
             height: '1123px',
             minHeight: '1123px',
-            maxHeight: '1123px',
             boxSizing: 'border-box',
             border: 'none',
             borderRadius: '0',
@@ -317,15 +412,6 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
     taxa: d.rate,
     afetados: d.affectedCount,
     total: d.totalDept
-  }));
-
-  // Worst Questions Data for Chart
-  const worstQuestionsData = analytics.worstQuestions.map((q, idx) => ({
-    name: `Q${q.questionId}`,
-    fullName: q.text,
-    favorabilidade: q.favorabilityIndex,
-    media: q.averageScore,
-    dimension: q.dimensionName
   }));
 
   const globalFav = getFavBadge(analytics.overallFavorability);
@@ -483,10 +569,17 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
     if (worstCount === 0) {
       return 'Todos os itens avaliados registraram índices favoráveis na escala Likert.';
     }
-    const lowestQuestions = analytics.worstQuestions.slice(0, 8);
+    const lowestQuestions = analytics.worstQuestions.slice(0, 5);
     const dimsAffected = Array.from(new Set(lowestQuestions.map(q => q.dimensionName)));
-    return `Os ${Math.min(8, worstCount)} itens com menor pontuação indicam os pontos prioritários para intervenção preventiva na empresa, concentrando-se principalmente nas dimensões de ${dimsAffected.join(', ')}.`;
+    return `Os ${Math.min(5, worstCount)} itens com menor pontuação indicam os pontos prioritários para intervenção preventiva na empresa, concentrando-se principalmente nas dimensões de ${dimsAffected.join(', ')}.`;
   };
+
+  // Filtragem dos arquivos da galeria
+  const filteredGalleryFiles = galleryFiles.filter(file => {
+    const matchesBucket = galleryFilter === 'all' || file.bucket === galleryFilter;
+    const matchesSearch = !gallerySearch || file.name.toLowerCase().includes(gallerySearch.toLowerCase());
+    return matchesBucket && matchesSearch;
+  });
 
   return (
     <div className="p-4 sm:p-6 space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto">
@@ -501,16 +594,25 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           <ArrowLeft size={18} /> Voltar aos Relatórios
         </button>
 
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
-          <span className="text-xs font-semibold text-slate-500 hidden md:inline">
-            Formato Padrão A4 • NR-1 / Portaria MTE nº 1.419/2024
-          </span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+          
+          {/* Botão de Alterar Logo da Galeria */}
+          <button
+            id="btn-open-gallery-logo"
+            onClick={handleOpenGalleryModal}
+            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border border-slate-300 cursor-pointer"
+            title="Selecionar ou alterar o logotipo que aparece no cabeçalho do laudo"
+          >
+            <ImageIcon size={16} className="text-[#2D6A4F]" />
+            <span>{reportLogoUrl ? 'Alterar Logotipo' : 'Buscar Imagem da Galeria'}</span>
+          </button>
+
           <button 
             id="btn-print-save-pdf"
             onClick={handleDirectPdfDownload}
             disabled={isGeneratingPdf}
             title="Salvar e baixar Laudo Técnico em PDF"
-            className="flex items-center justify-center gap-2 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:shadow-md active:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm hover:shadow-md active:opacity-90 transition-all cursor-pointer disabled:opacity-50"
           >
             {isGeneratingPdf ? (
               <>
@@ -533,76 +635,114 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
         {/* ------------------------------------------------------------------------- */}
         {/* PAGE 1: IDENTIFICAÇÃO, METADADOS & TAXA DE ADESÃO                         */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="report-a4-page bg-white p-8 sm:p-9 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+        <div className="report-a4-page bg-white p-7 sm:p-8 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
           
-          <div className="space-y-6">
-            {/* Document Header */}
-            <div className="border-b-2 border-slate-900 pb-5">
-              <div className="flex justify-between items-center gap-4 mb-3">
-                <div className="flex items-center gap-2 text-[#2D6A4F] font-bold text-sm uppercase tracking-wider">
-                  <ShieldCheck size={22} />
-                  <span>{profile.consultancyName}</span>
+          <div className="space-y-4">
+            
+            {/* =================================================================== */}
+            {/* NOVO CABEÇALHO DO LAUDO IDÊNTICO À IMAGEM DE REFERÊNCIA              */}
+            {/* =================================================================== */}
+            <div className="pt-1 pb-2">
+              
+              {/* Linha Superior: Logotipo à esquerda + Badge regulatório à direita */}
+              <div className="flex justify-between items-center gap-4 mb-4">
+                
+                {/* Logotipo da Galeria / Perfil com atalho interativo */}
+                <div 
+                  onClick={handleOpenGalleryModal}
+                  className="group relative cursor-pointer flex items-center"
+                  title="Clique para selecionar outro logotipo da galeria"
+                >
+                  {reportLogoUrl ? (
+                    <div className="relative">
+                      <img 
+                        src={reportLogoUrl} 
+                        alt="Logotipo da Consultoria" 
+                        crossOrigin="anonymous"
+                        className="h-16 w-auto max-w-[210px] object-contain transition-transform group-hover:scale-105"
+                      />
+                      <span className="absolute -bottom-2 left-0 bg-[#2D6A4F] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity print:hidden">
+                        Alterar logo
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-[#2D6A4F] font-bold text-sm uppercase tracking-wider p-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[#2D6A4F] transition-colors print:border-none">
+                      <ShieldCheck size={28} className="text-[#2D6A4F]" />
+                      <div className="text-left">
+                        <span className="block text-xs font-black text-slate-800">{profile.consultancyName || 'CONSULTORIA SST'}</span>
+                        <span className="block text-[9px] text-slate-400 print:hidden font-normal">Clique para escolher imagem</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-3 py-1 rounded-full border border-slate-300">
+
+                {/* Badge Regulatório com cantos arredondados (igual à imagem) */}
+                <div className="bg-slate-100/90 text-slate-700 text-[11px] sm:text-xs font-bold px-4 py-1.5 rounded-full border border-slate-300 tracking-wider shadow-2xs whitespace-nowrap">
                   DOCUMENTO TÉCNICO REGULATÓRIO
-                </span>
+                </div>
               </div>
 
-              <h1 className="text-xl sm:text-[22px] font-bold text-slate-900 tracking-normal leading-snug">
-                ANÁLISE DOS RESULTADOS DO QUESTIONÁRIO DE AVALIAÇÃO DE RISCOS PSICOSSOCIAIS, DE ACORDO COM A NR-1
-              </h1>
-              <p className="text-[11px] font-medium text-slate-500 mt-1.5 uppercase tracking-wide">
-                Referência Técnica: NR-1 e Portaria MTE nº 1.419/2024 • Instrumento Técnico HSE-IT
-              </p>
+              {/* Título Principal Centralizado em Caixa Alta */}
+              <div className="text-center space-y-1.5 my-3">
+                <h1 className="text-lg sm:text-[21px] md:text-[22px] font-black text-slate-900 tracking-normal uppercase leading-snug max-w-3xl mx-auto">
+                  RELATÓRIO EVIDENCIADO — DIAGNÓSTICO E MONITORAMENTO DE RISCOS PSICOSSOCIAIS
+                </h1>
+                <p className="text-[10.5px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                  REFERÊNCIA TÉCNICA: NR-1 E PORTARIA MTE Nº 1.419/2024 • INSTRUMENTO TÉCNICO HSE-IT
+                </p>
+              </div>
+
+              {/* Linha Divisória Escura Transversal (igual à imagem) */}
+              <hr className="border-t-2 border-slate-900 mt-3 mb-4" />
             </div>
 
             {/* Corporate Metadata Table */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Razão Social</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Razão Social</span>
                 <p className="font-bold text-slate-900 text-xs truncate">{analytics.corporateName}</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Nome Fantasia</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Nome Fantasia</span>
                 <p className="font-bold text-slate-900 text-xs truncate">{analytics.companyName}</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">CNPJ</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">CNPJ</span>
                 <p className="font-mono text-slate-900 font-bold text-xs">{analytics.cnpj}</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Atividade Principal</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Atividade Principal</span>
                 <p className="font-medium text-slate-800 text-xs truncate">{analytics.economicActivity}</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">CNAE & Grau de Risco</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">CNAE & Grau de Risco</span>
                 <p className="font-medium text-slate-800 text-xs">{analytics.cnae} | <span className="font-bold text-slate-900">Grau {analytics.riskDegree}</span></p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Unidade & Quadro</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Unidade & Quadro</span>
                 <p className="font-bold text-slate-900 text-xs">{analytics.unit} | {analytics.totalEmployees} Colab.</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Elaboração Técnica</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Elaboração Técnica</span>
                 <p className="font-bold text-slate-900 text-xs truncate">{profile.name} ({profile.councilRegister})</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Período de Aplicação</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Período de Aplicação</span>
                 <p className="font-medium text-slate-800 text-xs">{analytics.applicationPeriod}</p>
               </div>
               <div>
-                <span className="text-slate-400 font-bold uppercase text-[9px] block">Ano de Referência</span>
+                <span className="text-slate-400 font-bold uppercase text-[8.5px] block">Ano de Referência</span>
                 <p className="font-bold text-slate-900 text-xs">{analytics.referenceYear}</p>
               </div>
             </div>
 
             {/* Section 1: Instrumento Técnico */}
-            <section className="space-y-2.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <Layers className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-black text-slate-900">1. INSTRUMENTO TÉCNICO</h2>
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <Layers className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-black text-slate-900">1. INSTRUMENTO TÉCNICO</h2>
               </div>
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-2">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
                 <p className="font-bold text-slate-900">
                   HSE-IT – Health and Safety Executive – Indicator Tool
                 </p>
@@ -610,46 +750,46 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                   O HSE-IT (Health and Safety Executive – Indicator Tool) é um instrumento validado no Brasil, desenvolvido pelo Health and Safety Executive (Reino Unido), destinado à avaliação dos riscos psicossociais e do estresse ocupacional por meio de questionário quantitativo.
                 </p>
                 <p>
-                  A aplicação do instrumento foi realizada de forma presencial, durante os meses de junho e julho de 2026, como parte do processo de monitoramento dos riscos psicossociais ocupacionais e de integração das informações ao Gerenciamento de Riscos Ocupacionais (GRO), conforme as diretrizes da NR-1.
+                  A aplicação do instrumento foi realizada de forma presencial e digital como parte do processo de monitoramento dos riscos psicossociais ocupacionais e de integração das informações ao Gerenciamento de Riscos Ocupacionais (GRO), conforme as diretrizes da NR-1.
                 </p>
               </div>
             </section>
 
             {/* Section 2: Número de Funcionários */}
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <UsersIcon className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-black text-slate-900">2. NÚMERO DE FUNCIONÁRIOS</h2>
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <UsersIcon className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-black text-slate-900">2. NÚMERO DE FUNCIONÁRIOS</h2>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Total na Empresa</span>
-                  <span className="text-2xl font-black text-slate-900 mt-0.5 block">{analytics.totalEmployees}</span>
-                  <span className="text-[10px] text-slate-500 truncate block">{analytics.unit}</span>
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[9.5px] text-slate-500 font-bold uppercase block">Total na Empresa</span>
+                  <span className="text-xl font-black text-slate-900 mt-0.5 block">{analytics.totalEmployees}</span>
+                  <span className="text-[9.5px] text-slate-500 truncate block">{analytics.unit}</span>
                 </div>
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                  <span className="text-[10px] text-emerald-800 font-bold uppercase block">Participantes</span>
-                  <span className="text-2xl font-black text-emerald-900 mt-0.5 block">{analytics.evaluatedEmployees}</span>
-                  <span className="text-[10px] text-emerald-700 font-semibold">Adesão: {analytics.adherenceRate}%</span>
+                <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+                  <span className="text-[9.5px] text-emerald-800 font-bold uppercase block">Participantes</span>
+                  <span className="text-xl font-black text-emerald-900 mt-0.5 block">{analytics.evaluatedEmployees}</span>
+                  <span className="text-[9.5px] text-emerald-700 font-semibold">Adesão: {analytics.adherenceRate}%</span>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Não Participantes</span>
-                  <span className="text-2xl font-black text-slate-700 mt-0.5 block">{analytics.unansweredEmployees}</span>
-                  <span className="text-[10px] text-slate-500 font-semibold">{analytics.unansweredRate}%</span>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[9.5px] text-slate-500 font-bold uppercase block">Não Participantes</span>
+                  <span className="text-xl font-black text-slate-700 mt-0.5 block">{analytics.unansweredEmployees}</span>
+                  <span className="text-[9.5px] text-slate-500 font-semibold">{analytics.unansweredRate}%</span>
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
                 <p>
-                  A participação de <strong>{analytics.evaluatedEmployees} colaboradores</strong> representa uma adesão de <strong>{analytics.adherenceRate}%</strong> do quadro da unidade, proporcionando uma base ampla para a análise geral dos fatores psicossociais identificados.
+                  A participação de <strong>{analytics.evaluatedEmployees} colaboradores</strong> representa uma adesão de <strong>{analytics.adherenceRate}%</strong> do quadro da unidade, proporcionando uma base sólida para a análise estatística dos fatores psicossociais identificados.
                 </p>
               </div>
             </section>
           </div>
 
           {/* Page 1 Footer */}
-          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
             <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
             <span className="font-bold text-slate-600">Página 1 de 5</span>
           </div>
@@ -658,59 +798,64 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
         {/* ------------------------------------------------------------------------- */}
         {/* PAGE 2: PARTICIPANTES POR SETOR & VISÃO GERAL DE FAVORABILIDADE           */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="report-a4-page bg-white p-8 sm:p-9 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+        <div className="report-a4-page bg-white p-7 sm:p-8 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
           
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {/* Page Header Stamp */}
             <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
-              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <div className="flex items-center gap-2">
+                {reportLogoUrl && (
+                  <img src={reportLogoUrl} alt="Logo" crossOrigin="anonymous" className="h-5 w-auto max-w-[80px] object-contain" />
+                )}
+                <span className="font-bold text-[#2D6A4F] uppercase tracking-wider text-[11px]">{profile.consultancyName}</span>
+              </div>
               <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
             </div>
 
             {/* Section 3: Participantes por Setor / Área */}
-            <section className="space-y-2.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <BarChart2 className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-bold text-slate-900 tracking-normal">3. PARTICIPANTES POR SETOR / ÁREA</h2>
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <BarChart2 className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-bold text-slate-900 tracking-normal">3. PARTICIPANTES POR SETOR / ÁREA</h2>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                 {/* Table */}
                 <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[9px]">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[8.5px]">
                       <tr>
-                        <th className="p-2 border-b border-slate-200">Setor / Área</th>
-                        <th className="p-2 border-b border-slate-200 text-center">Partic.</th>
-                        <th className="p-2 border-b border-slate-200 text-center">% Total</th>
+                        <th className="p-1.5 border-b border-slate-200">Setor / Área</th>
+                        <th className="p-1.5 border-b border-slate-200 text-center">Partic.</th>
+                        <th className="p-1.5 border-b border-slate-200 text-center">% Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {analytics.departmentScores.map(dept => (
                         <tr key={dept.departmentId} className="hover:bg-slate-50">
-                          <td className="p-2 font-bold text-slate-900 truncate max-w-[130px]">{dept.departmentName}</td>
-                          <td className="p-2 text-center font-mono font-semibold">{dept.respondentsCount}</td>
-                          <td className="p-2 text-center font-mono font-semibold">{dept.percentageOfTotal}%</td>
+                          <td className="p-1.5 font-bold text-slate-900 truncate max-w-[130px]">{dept.departmentName}</td>
+                          <td className="p-1.5 text-center font-mono font-semibold">{dept.respondentsCount}</td>
+                          <td className="p-1.5 text-center font-mono font-semibold">{dept.percentageOfTotal}%</td>
                         </tr>
                       ))}
                       <tr className="bg-slate-100 font-black">
-                        <td className="p-2 text-slate-900 uppercase text-xs">TOTAL</td>
-                        <td className="p-2 text-center font-mono text-xs">{analytics.evaluatedEmployees}</td>
-                        <td className="p-2 text-center font-mono text-xs">100%</td>
+                        <td className="p-1.5 text-slate-900 uppercase text-xs">TOTAL</td>
+                        <td className="p-1.5 text-center font-mono text-xs">{analytics.evaluatedEmployees}</td>
+                        <td className="p-1.5 text-center font-mono text-xs">100%</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
 
                 {/* Chart 1: Participantes por Setor */}
-                <div className="md:col-span-6 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-700 block mb-1">Gráfico 1: Participantes por Setor</span>
-                  <div className="h-36 w-full">
+                <div className="md:col-span-6 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                  <span className="text-[9.5px] font-bold text-slate-700 block mb-1">Gráfico 1: Participantes por Setor</span>
+                  <div className="h-32 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={participantsData} layout="vertical" margin={{ top: 0, right: 20, left: -5, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
-                        <XAxis type="number" tick={{ fontSize: 9 }} />
-                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 9, fill: '#334155' }} />
+                        <XAxis type="number" tick={{ fontSize: 8.5 }} />
+                        <YAxis dataKey="name" type="category" width={75} tick={{ fontSize: 8.5, fill: '#334155' }} />
                         <Tooltip 
                           formatter={(val: number) => [`${val} colab.`, 'Participantes']}
                           labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
@@ -727,23 +872,23 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
 
               {/* Observação Metodológica */}
-              <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900 leading-snug">
+              <div className="p-2 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-900 leading-snug">
                 <strong>Observação metodológica:</strong> {getMethodologicalObservation()}
               </div>
             </section>
 
             {/* Section 4: Índice de Favorabilidade por Dimensão e por Setor - Parte 1 */}
-            <section className="space-y-2.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <TrendingUp className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-black text-slate-900">4. ÍNDICE DE FAVORABILIDADE POR DIMENSÃO E POR SETOR</h2>
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <TrendingUp className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-black text-slate-900">4. ÍNDICE DE FAVORABILIDADE POR DIMENSÃO E POR SETOR</h2>
               </div>
 
               <div className="text-xs text-slate-600 space-y-1">
                 <p>
                   A escala utilizada varia de 0 a 100, sendo que quanto maior o índice, menor o nível de risco psicossocial identificado.
                 </p>
-                <div className="flex flex-wrap items-center gap-3 pt-0.5 font-medium text-[11px]">
+                <div className="flex flex-wrap items-center gap-2.5 pt-0.5 font-medium text-[10.5px]">
                   <span className="text-slate-700 font-bold">Critérios de classificação:</span>
                   <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                     • <strong>Favorável – baixo risco:</strong> 67 ou mais
@@ -758,38 +903,38 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
 
               {/* Charts Row: Radar + Sector Favorability */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
                 {/* Radar Chart */}
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-700 block mb-1">
+                <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
+                  <span className="text-[9.5px] font-bold text-slate-700 block mb-1">
                     Gráfico 2: Radar das 6 Dimensões HSE-IT (Empresa)
                   </span>
-                  <div className="h-44 w-full">
+                  <div className="h-40 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="60%" data={radarData}>
                         <PolarGrid stroke="#CBD5E1" />
-                        <PolarAngleAxis dataKey="dimension" tick={{ fill: '#334155', fontSize: 8, fontWeight: 700 }} />
+                        <PolarAngleAxis dataKey="dimension" tick={{ fill: '#334155', fontSize: 7.5, fontWeight: 700 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 7 }} />
                         <Tooltip formatter={(val: number) => [`${val} pts`, 'Favorabilidade']} />
                         <Radar name="Empresa" dataKey="favorabilidade" stroke="#2D6A4F" fill="#2D6A4F" fillOpacity={0.4} />
                         <Radar name="Corte (67+)" dataKey="corteFavoravel" stroke="#F59E0B" strokeDasharray="3 3" fill="transparent" />
-                        <Legend wrapperStyle={{ fontSize: '9px', paddingTop: '2px' }} />
+                        <Legend wrapperStyle={{ fontSize: '8.5px', paddingTop: '2px' }} />
                       </RadarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
                 {/* Sector Favorability Bars */}
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-700 block mb-1">
+                <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
+                  <span className="text-[9.5px] font-bold text-slate-700 block mb-1">
                     Gráfico 3: Favorabilidade Consolidada por Setor
                   </span>
-                  <div className="h-44 w-full">
+                  <div className="h-40 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={sectorFavorabilityData} margin={{ top: 5, right: 10, left: -15, bottom: 15 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                        <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" tick={{ fontSize: 8, fill: '#334155' }} />
-                        <YAxis domain={[0, 100]} tick={{ fontSize: 8 }} />
+                        <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" tick={{ fontSize: 7.5, fill: '#334155' }} />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 7.5 }} />
                         <Tooltip 
                           formatter={(val: number) => [`${val} pts`, 'Favorabilidade']}
                           labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label}
@@ -812,7 +957,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           </div>
 
           {/* Page 2 Footer */}
-          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
             <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
             <span className="font-bold text-slate-600">Página 2 de 5</span>
           </div>
@@ -821,32 +966,37 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
         {/* ------------------------------------------------------------------------- */}
         {/* PAGE 3: MATRIZ DE DIMENSÕES & SÍNTESE DOS RESULTADOS                       */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="report-a4-page bg-white p-8 sm:p-9 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+        <div className="report-a4-page bg-white p-7 sm:p-8 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
           
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {/* Page Header Stamp */}
             <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
-              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <div className="flex items-center gap-2">
+                {reportLogoUrl && (
+                  <img src={reportLogoUrl} alt="Logo" crossOrigin="anonymous" className="h-5 w-auto max-w-[80px] object-contain" />
+                )}
+                <span className="font-bold text-[#2D6A4F] uppercase tracking-wider text-[11px]">{profile.consultancyName}</span>
+              </div>
               <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
             </div>
 
             {/* Matrix Table */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <Layers className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-bold text-slate-900 tracking-normal">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <Layers className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-bold text-slate-900 tracking-normal">
                   4. ÍNDICE DE FAVORABILIDADE POR DIMENSÃO E POR SETOR (MATRIZ ANALÍTICA)
                 </h2>
               </div>
               
               <div className="overflow-hidden border border-slate-200 rounded-xl">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-900 text-white font-bold uppercase text-[9px]">
+                  <thead className="bg-slate-900 text-white font-bold uppercase text-[8.5px]">
                     <tr>
-                      <th className="p-2.5">Dimensão HSE-IT</th>
-                      <th className="p-2.5 text-center bg-slate-800">Empresa Geral</th>
+                      <th className="p-2">Dimensão HSE-IT</th>
+                      <th className="p-2 text-center bg-slate-800">Empresa Geral</th>
                       {analytics.departmentScores.map(dept => (
-                        <th key={dept.departmentId} className="p-2.5 text-center border-l border-slate-800">
+                        <th key={dept.departmentId} className="p-2 text-center border-l border-slate-800">
                           {dept.departmentName}
                         </th>
                       ))}
@@ -855,9 +1005,9 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                   <tbody className="divide-y divide-slate-200">
                     {analytics.dimensionScores.map(dim => (
                       <tr key={dim.dimensionId} className="hover:bg-slate-50">
-                        <td className="p-2.5 font-bold text-slate-900 text-xs">{dim.dimensionName}</td>
-                        <td className="p-2.5 text-center bg-slate-50 font-bold">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] border ${getFavBadge(dim.favorabilityIndex).badge}`}>
+                        <td className="p-2 font-bold text-slate-900 text-xs">{dim.dimensionName}</td>
+                        <td className="p-2 text-center bg-slate-50 font-bold">
+                          <span className={`inline-block px-1.5 py-0.2 rounded text-[10.5px] border ${getFavBadge(dim.favorabilityIndex).badge}`}>
                             {dim.favorabilityIndex}
                           </span>
                         </td>
@@ -866,8 +1016,8 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                           const fav = deptDim ? deptDim.favorabilityIndex : 50;
                           const badge = getFavBadge(fav);
                           return (
-                            <td key={dept.departmentId} className="p-2.5 text-center border-l border-slate-200">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${badge.badge}`}>
+                            <td key={dept.departmentId} className="p-2 text-center border-l border-slate-200">
+                              <span className={`inline-block px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${badge.badge}`}>
                                 {fav}
                               </span>
                             </td>
@@ -877,17 +1027,17 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                     ))}
                     {/* Media Geral Row */}
                     <tr className="bg-slate-100 font-black">
-                      <td className="p-2.5 text-slate-900 uppercase text-xs">Média Consolidada</td>
-                      <td className="p-2.5 text-center bg-slate-200">
-                        <span className={`inline-block px-2.5 py-0.5 rounded text-xs border ${globalFav.badge}`}>
+                      <td className="p-2 text-slate-900 uppercase text-xs">Média Consolidada</td>
+                      <td className="p-2 text-center bg-slate-200">
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs border ${globalFav.badge}`}>
                           {analytics.overallFavorability}
                         </span>
                       </td>
                       {analytics.departmentScores.map(dept => {
                         const badge = getFavBadge(dept.favorabilityIndex);
                         return (
-                          <td key={dept.departmentId} className="p-2.5 text-center border-l border-slate-300">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] border ${badge.badge}`}>
+                          <td key={dept.departmentId} className="p-2 text-center border-l border-slate-300">
+                            <span className={`inline-block px-1.5 py-0.2 rounded text-[9.5px] border ${badge.badge}`}>
                               {dept.favorabilityIndex}
                             </span>
                           </td>
@@ -900,7 +1050,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
             </div>
 
             {/* Síntese dos Resultados do Tópico 4 */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1">
               <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide">Síntese dos resultados</h3>
               <p>
                 {getTopic4Synthesis()}
@@ -908,9 +1058,9 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
             </div>
 
             {/* Detalhamento Técnico das Dimensões */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1.5">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed space-y-1">
               <h3 className="font-bold text-slate-900 text-xs">Detalhamento dos Resultados por Dimensão (Geral Empresa):</h3>
-              <ul className="list-disc pl-5 space-y-1 text-xs">
+              <ul className="list-disc pl-4 space-y-0.5 text-xs">
                 {analytics.dimensionScores.map(dim => {
                   const badge = getFavBadge(dim.favorabilityIndex);
                   return (
@@ -924,7 +1074,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           </div>
 
           {/* Page 3 Footer */}
-          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
             <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
             <span className="font-bold text-slate-600">Página 3 de 5</span>
           </div>
@@ -933,39 +1083,44 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
         {/* ------------------------------------------------------------------------- */}
         {/* PAGE 4: INDICADORES CRÍTICOS DE CONDUTA & ASSÉDIO SEXUAL                  */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="report-a4-page bg-white p-8 sm:p-9 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+        <div className="report-a4-page bg-white p-7 sm:p-8 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
           
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {/* Page Header Stamp */}
             <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
-              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <div className="flex items-center gap-2">
+                {reportLogoUrl && (
+                  <img src={reportLogoUrl} alt="Logo" crossOrigin="anonymous" className="h-5 w-auto max-w-[80px] object-contain" />
+                )}
+                <span className="font-bold text-[#2D6A4F] uppercase tracking-wider text-[11px]">{profile.consultancyName}</span>
+              </div>
               <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
             </div>
 
             {/* Section 5: Indicadores Críticos de Conduta */}
-            <section className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
-                <AlertOctagon className="text-[#2D6A4F]" size={18} />
-                <h2 className="text-base font-bold text-slate-900 tracking-normal">5. INDICADORES CRÍTICOS DE CONDUTA</h2>
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                <AlertOctagon className="text-[#2D6A4F]" size={17} />
+                <h2 className="text-sm font-bold text-slate-900 tracking-normal">5. INDICADORES CRÍTICOS DE CONDUTA</h2>
               </div>
 
               {/* 5.1 Segurança / Estabilidade do Emprego */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-slate-900 text-xs">5.1 Segurança / Estabilidade do Emprego</h3>
-                  <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] border ${getFavBadge(analytics.stabilityStats.overallFavorability || 0).badge}`}>
+                  <span className={`px-2 py-0.2 rounded font-bold uppercase text-[9.5px] border ${getFavBadge(analytics.stabilityStats.overallFavorability || 0).badge}`}>
                     Empresa (geral): {analytics.stabilityStats.overallFavorability} — {getFavBadge(analytics.stabilityStats.overallFavorability || 0).label}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[11px] pt-1">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-[10.5px] pt-0.5">
                   {analytics.stabilityStats.departmentStats.map(d => (
-                    <div key={d.departmentId} className="bg-white p-1.5 rounded border border-slate-200 text-center">
-                      <span className="text-slate-500 text-[9px] block truncate font-medium">{d.departmentName}</span>
+                    <div key={d.departmentId} className="bg-white p-1 rounded border border-slate-200 text-center">
+                      <span className="text-slate-500 text-[8.5px] block truncate font-medium">{d.departmentName}</span>
                       <span className="font-bold text-slate-900">{d.rate}</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-slate-600 text-[11px] pt-0.5">
+                <p className="text-slate-600 text-[10.5px] pt-0.5">
                   {(analytics.stabilityStats.overallFavorability || 0) >= 67
                     ? `Os resultados indicam percepção favorável (${analytics.stabilityStats.overallFavorability} pts) quanto à segurança e estabilidade do emprego na organização, constituindo importante fator de proteção psicossocial.`
                     : `O índice de estabilidade no emprego (${analytics.stabilityStats.overallFavorability} pts) requer atenção e alinhamento de expectativas no plano de comunicação interna.`}
@@ -973,32 +1128,32 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
               </div>
 
               {/* 5.2 Assédio Moral */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h3 className="font-bold text-slate-900 text-xs">5.2 Assédio Moral</h3>
-                  <span className="text-[10px] text-slate-500 font-medium">
+                  <span className="text-[9.5px] text-slate-500 font-medium">
                     Critérios: &lt;10% Favorável | 10% a 25% Atenção | &gt;25% Crítico
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
                   <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
                     <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-100 font-bold uppercase text-[9px] text-slate-700">
+                      <thead className="bg-slate-100 font-bold uppercase text-[8.5px] text-slate-700">
                         <tr>
-                          <th className="p-1.5 border-b border-slate-200">Setor</th>
-                          <th className="p-1.5 border-b border-slate-200 text-center">Taxa</th>
-                          <th className="p-1.5 border-b border-slate-200 text-center">Ocorrência</th>
-                          <th className="p-1.5 border-b border-slate-200 text-center">Classificação</th>
+                          <th className="p-1 border-b border-slate-200">Setor</th>
+                          <th className="p-1 border-b border-slate-200 text-center">Taxa</th>
+                          <th className="p-1 border-b border-slate-200 text-center">Ocorrência</th>
+                          <th className="p-1 border-b border-slate-200 text-center">Classificação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         <tr className="bg-slate-100 font-bold">
-                          <td className="p-1.5 text-slate-900">Empresa (geral)</td>
-                          <td className="p-1.5 text-center font-mono">{analytics.moralHarassmentStats.overallRate}%</td>
-                          <td className="p-1.5 text-center font-mono text-[11px]">{analytics.moralHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
-                          <td className="p-1.5 text-center">
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${getBullyingBadge(analytics.moralHarassmentStats.overallRate).badge}`}>
+                          <td className="p-1 text-slate-900">Empresa (geral)</td>
+                          <td className="p-1 text-center font-mono">{analytics.moralHarassmentStats.overallRate}%</td>
+                          <td className="p-1 text-center font-mono text-[10px]">{analytics.moralHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
+                          <td className="p-1 text-center">
+                            <span className={`text-[8.5px] font-bold px-1 py-0.2 rounded border ${getBullyingBadge(analytics.moralHarassmentStats.overallRate).badge}`}>
                               {getBullyingBadge(analytics.moralHarassmentStats.overallRate).label}
                             </span>
                           </td>
@@ -1007,11 +1162,11 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                           const badge = getBullyingBadge(d.rate);
                           return (
                             <tr key={d.departmentId} className="hover:bg-slate-50">
-                              <td className="p-1.5 font-medium text-slate-800 truncate max-w-[110px]">{d.departmentName}</td>
-                              <td className="p-1.5 text-center font-mono font-bold">{d.rate}%</td>
-                              <td className="p-1.5 text-center font-mono text-[10px]">{d.affectedCount} de {d.totalDept}</td>
-                              <td className="p-1.5 text-center">
-                                <span className={`text-[9px] font-bold px-1 py-0.2 rounded border ${badge.badge}`}>
+                              <td className="p-1 font-medium text-slate-800 truncate max-w-[100px]">{d.departmentName}</td>
+                              <td className="p-1 text-center font-mono font-bold">{d.rate}%</td>
+                              <td className="p-1 text-center font-mono text-[9.5px]">{d.affectedCount} de {d.totalDept}</td>
+                              <td className="p-1 text-center">
+                                <span className={`text-[8.5px] font-bold px-1 py-0.2 rounded border ${badge.badge}`}>
                                   {badge.label}
                                 </span>
                               </td>
@@ -1022,14 +1177,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                     </table>
                   </div>
 
-                  <div className="md:col-span-6 bg-white p-2 rounded-lg border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-700 block mb-1">Taxa de Assédio Moral por Setor (%)</span>
-                    <div className="h-32 w-full">
+                  <div className="md:col-span-6 bg-white p-1.5 rounded-lg border border-slate-200">
+                    <span className="text-[9px] font-bold text-slate-700 block mb-0.5">Taxa de Assédio Moral por Setor (%)</span>
+                    <div className="h-28 w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={bullyingData} layout="vertical" margin={{ top: 0, right: 15, left: -5, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
-                          <XAxis type="number" domain={[0, 60]} tick={{ fontSize: 8 }} unit="%" />
-                          <YAxis dataKey="name" type="category" width={75} tick={{ fontSize: 8, fill: '#334155' }} />
+                          <XAxis type="number" domain={[0, 60]} tick={{ fontSize: 7.5 }} unit="%" />
+                          <YAxis dataKey="name" type="category" width={70} tick={{ fontSize: 7.5, fill: '#334155' }} />
                           <Tooltip formatter={(val: number) => [`${val}%`, 'Taxa']} />
                           <ReferenceLine x={10} stroke="#F59E0B" strokeDasharray="3 3" />
                           <Bar dataKey="taxa" radius={[0, 3, 3, 0]}>
@@ -1043,7 +1198,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-600 space-y-1 pt-1 border-t border-slate-200">
+                <div className="text-[10.5px] text-slate-600 space-y-0.5 pt-0.5 border-t border-slate-200">
                   <p>
                     <strong>Distribuição geral:</strong> Nunca {analytics.moralHarassmentStats.distribution?.nunca || 0} / Raramente {analytics.moralHarassmentStats.distribution?.raramente || 0} / Às vezes {analytics.moralHarassmentStats.distribution?.asVezes || 0} / Frequente {analytics.moralHarassmentStats.distribution?.frequente || 0} / Sempre {analytics.moralHarassmentStats.distribution?.sempre || 0}.
                   </p>
@@ -1051,7 +1206,7 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                     {analytics.moralHarassmentStats.overallRate > 25
                       ? `O resultado geral atingiu patamar crítico (${analytics.moralHarassmentStats.overallRate}%), constituindo ponto prioritário de intervenção com fortalecimento imediato dos canais confidenciais e ações preventivas no PGR.`
                       : analytics.moralHarassmentStats.overallRate >= 10
-                      ? `O resultado geral situa-se na faixa de atenção (${analytics.moralHarassmentStats.overallRate}%), exigindo capacitação de liderança e diálogo preventivo. Nos setores com pequenas amostras, os dados devem ser interpretados com cautela, sem exposição individual.`
+                      ? `O resultado geral situa-se na faixa de atenção (${analytics.moralHarassmentStats.overallRate}%), exigindo capacitação de liderança e diálogo preventivo. Nos setores com pequenas amostras, os dados devem ser interpretados com cautela.`
                       : `O resultado geral permanece em patamar favorável (${analytics.moralHarassmentStats.overallRate}%), recomendando-se a manutenção ativa de canais confidenciais de relato e ações educativas contínuas.`}
                   </p>
                 </div>
@@ -1059,35 +1214,35 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
             </section>
 
             {/* Section 6: Assédio Sexual */}
-            <section className="space-y-2.5">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+            <section className="space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="text-[#2D6A4F]" size={18} />
-                  <h2 className="text-base font-bold text-slate-900 tracking-normal">6. ASSÉDIO SEXUAL</h2>
+                  <AlertTriangle className="text-[#2D6A4F]" size={17} />
+                  <h2 className="text-sm font-bold text-slate-900 tracking-normal">6. ASSÉDIO SEXUAL</h2>
                 </div>
-                <span className="text-[10px] text-slate-500 font-medium">
+                <span className="text-[9.5px] text-slate-500 font-medium">
                   Critérios: &lt;3% Favorável | 3% a 10% Atenção | &gt;10% Crítico
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
                 <div className="md:col-span-6 overflow-hidden border border-slate-200 rounded-lg">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-100 font-bold uppercase text-[9px] text-slate-700">
+                    <thead className="bg-slate-100 font-bold uppercase text-[8.5px] text-slate-700">
                       <tr>
-                        <th className="p-1.5 border-b border-slate-200">Setor</th>
-                        <th className="p-1.5 border-b border-slate-200 text-center">Taxa</th>
-                        <th className="p-1.5 border-b border-slate-200 text-center">Ocorrência</th>
-                        <th className="p-1.5 border-b border-slate-200 text-center">Classificação</th>
+                        <th className="p-1 border-b border-slate-200">Setor</th>
+                        <th className="p-1 border-b border-slate-200 text-center">Taxa</th>
+                        <th className="p-1 border-b border-slate-200 text-center">Ocorrência</th>
+                        <th className="p-1 border-b border-slate-200 text-center">Classificação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       <tr className="bg-slate-100 font-bold">
-                        <td className="p-1.5 text-slate-900">Empresa (geral)</td>
-                        <td className="p-1.5 text-center font-mono">{analytics.sexualHarassmentStats.overallRate}%</td>
-                        <td className="p-1.5 text-center font-mono text-[11px]">{analytics.sexualHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
-                        <td className="p-1.5 text-center">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${getSexualBadge(analytics.sexualHarassmentStats.overallRate).badge}`}>
+                        <td className="p-1 text-slate-900">Empresa (geral)</td>
+                        <td className="p-1 text-center font-mono">{analytics.sexualHarassmentStats.overallRate}%</td>
+                        <td className="p-1 text-center font-mono text-[10px]">{analytics.sexualHarassmentStats.overallAffectedCount} de {analytics.evaluatedEmployees}</td>
+                        <td className="p-1 text-center">
+                          <span className={`text-[8.5px] font-bold px-1 py-0.2 rounded border ${getSexualBadge(analytics.sexualHarassmentStats.overallRate).badge}`}>
                             {getSexualBadge(analytics.sexualHarassmentStats.overallRate).label}
                           </span>
                         </td>
@@ -1096,11 +1251,11 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                         const badge = getSexualBadge(d.rate);
                         return (
                           <tr key={d.departmentId} className="hover:bg-slate-50">
-                            <td className="p-1.5 font-medium text-slate-800 truncate max-w-[110px]">{d.departmentName}</td>
-                            <td className="p-1.5 text-center font-mono font-bold">{d.rate}%</td>
-                            <td className="p-1.5 text-center font-mono text-[10px]">{d.affectedCount} de {d.totalDept}</td>
-                            <td className="p-1.5 text-center">
-                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded border ${badge.badge}`}>
+                            <td className="p-1 font-medium text-slate-800 truncate max-w-[100px]">{d.departmentName}</td>
+                            <td className="p-1 text-center font-mono font-bold">{d.rate}%</td>
+                            <td className="p-1 text-center font-mono text-[9.5px]">{d.affectedCount} de {d.totalDept}</td>
+                            <td className="p-1 text-center">
+                              <span className={`text-[8.5px] font-bold px-1 py-0.2 rounded border ${badge.badge}`}>
                                 {badge.label}
                               </span>
                             </td>
@@ -1111,14 +1266,14 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                   </table>
                 </div>
 
-                <div className="md:col-span-6 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-700 block mb-1">Taxa de Assédio Sexual por Setor (%)</span>
-                  <div className="h-32 w-full">
+                <div className="md:col-span-6 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                  <span className="text-[9px] font-bold text-slate-700 block mb-0.5">Taxa de Assédio Sexual por Setor (%)</span>
+                  <div className="h-28 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={sexualData} layout="vertical" margin={{ top: 0, right: 15, left: -5, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#E2E8F0" />
-                        <XAxis type="number" domain={[0, 25]} tick={{ fontSize: 8 }} unit="%" />
-                        <YAxis dataKey="name" type="category" width={75} tick={{ fontSize: 8, fill: '#334155' }} />
+                        <XAxis type="number" domain={[0, 25]} tick={{ fontSize: 7.5 }} unit="%" />
+                        <YAxis dataKey="name" type="category" width={70} tick={{ fontSize: 7.5, fill: '#334155' }} />
                         <Tooltip formatter={(val: number) => [`${val}%`, 'Taxa']} />
                         <ReferenceLine x={3} stroke="#F59E0B" strokeDasharray="3 3" />
                         <Bar dataKey="taxa" radius={[0, 3, 3, 0]}>
@@ -1132,11 +1287,11 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-1">
-                <p>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-0.5">
+                <p className="text-[10.5px]">
                   <strong>Distribuição geral:</strong> Nunca {analytics.sexualHarassmentStats.distribution?.nunca || 0} / Raramente {analytics.sexualHarassmentStats.distribution?.raramente || 0} / Às vezes {analytics.sexualHarassmentStats.distribution?.asVezes || 0} / Frequente {analytics.sexualHarassmentStats.distribution?.frequente || 0} / Sempre {analytics.sexualHarassmentStats.distribution?.sempre || 0}.
                 </p>
-                <p className="italic text-slate-500">
+                <p className="italic text-slate-500 text-[10.5px]">
                   {analytics.sexualHarassmentStats.overallRate > 10
                     ? `O índice geral (${analytics.sexualHarassmentStats.overallRate}%) exige intervenção prioritária e imediata no âmbito da CIPAA e conformidade com a Lei nº 14.457/2022.`
                     : analytics.sexualHarassmentStats.overallRate >= 3
@@ -1148,52 +1303,58 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           </div>
 
           {/* Page 4 Footer */}
-          <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
             <span>{analytics.companyName} • CNPJ: {analytics.cnpj}</span>
             <span className="font-bold text-slate-600">Página 4 de 5</span>
           </div>
         </div>
 
         {/* ------------------------------------------------------------------------- */}
-        {/* PAGE 5: PERGUNTAS PIOR AVALIAÇÃO, SÍNTESE, CONSIDERAÇÕES & ASSINATURAS    */}
+        {/* PAGE 5: PERGUNTAS PIOR AVALIAÇÃO, SÍNTESE & CONSIDERAÇÕES FINAIS          */}
+        {/* (ASSINATURAS REMOVIDAS CONFORME SOLICITADO PARA ENCAIXAR PERFEITAMENTE)  */}
         {/* ------------------------------------------------------------------------- */}
-        <div className="report-a4-page bg-white p-8 sm:p-9 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
+        <div className="report-a4-page bg-white p-6 sm:p-7 rounded-xl border border-slate-200 shadow-md min-h-[1123px] flex flex-col justify-between text-slate-800 print:border-none print:shadow-none print:p-6 print:m-0 print:min-h-[297mm]">
           
           <div className="space-y-3.5">
             {/* Page Header Stamp */}
             <div className="border-b border-slate-300 pb-2 flex justify-between items-center text-xs">
-              <span className="font-bold text-[#2D6A4F] uppercase tracking-wider">{profile.consultancyName}</span>
+              <div className="flex items-center gap-2">
+                {reportLogoUrl && (
+                  <img src={reportLogoUrl} alt="Logo" crossOrigin="anonymous" className="h-5 w-auto max-w-[80px] object-contain" />
+                )}
+                <span className="font-bold text-[#2D6A4F] uppercase tracking-wider text-[11px]">{profile.consultancyName}</span>
+              </div>
               <span className="text-slate-500 text-[11px]">Laudo Técnico NR-01 • {analytics.companyName}</span>
             </div>
 
             {/* Section 7: Perguntas com Pior Avaliação */}
-            <section className="space-y-1.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
-                <HelpCircle className="text-[#2D6A4F]" size={16} />
-                <h2 className="text-sm font-bold text-slate-900 tracking-normal">7. PERGUNTAS COM PIOR AVALIAÇÃO</h2>
+            <section className="space-y-1">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-0.5">
+                <HelpCircle className="text-[#2D6A4F]" size={15} />
+                <h2 className="text-xs font-bold text-slate-900 tracking-normal">7. PERGUNTAS COM PIOR AVALIAÇÃO</h2>
               </div>
 
               <div className="overflow-hidden border border-slate-200 rounded-lg">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 font-bold uppercase text-[8.5px] text-slate-700">
+                  <thead className="bg-slate-100 font-bold uppercase text-[8px] text-slate-700">
                     <tr>
-                      <th className="p-1.5 border-b border-slate-200">Item / Pergunta Avaliada</th>
-                      <th className="p-1.5 border-b border-slate-200 text-center">Média Likert</th>
-                      <th className="p-1.5 border-b border-slate-200 text-center">Favorabilidade</th>
+                      <th className="px-2 py-1 border-b border-slate-200">Item / Pergunta Avaliada</th>
+                      <th className="px-2 py-1 border-b border-slate-200 text-center">Média Likert</th>
+                      <th className="px-2 py-1 border-b border-slate-200 text-center">Favorabilidade</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {analytics.worstQuestions.slice(0, 8).map(q => {
+                    {analytics.worstQuestions.slice(0, 5).map(q => {
                       const badge = getFavBadge(q.favorabilityIndex);
                       return (
                         <tr key={q.questionId} className="hover:bg-slate-50">
-                          <td className="p-1.5 font-medium text-slate-900 text-xs">
+                          <td className="px-2 py-1 font-medium text-slate-900 text-[11px]">
                             <span className="font-bold text-slate-600 mr-1">Q{q.questionId} —</span>
                             {q.text}
                           </td>
-                          <td className="p-1.5 text-center font-mono font-bold text-slate-900 text-xs">{q.averageScore.toFixed(2)}</td>
-                          <td className="p-1.5 text-center">
-                            <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded border ${badge.badge}`}>
+                          <td className="px-2 py-1 text-center font-mono font-bold text-slate-900 text-[11px]">{q.averageScore.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-center">
+                            <span className={`text-[8.5px] font-bold px-1.5 py-0.2 rounded border ${badge.badge}`}>
                               {q.favorabilityIndex} pts
                             </span>
                           </td>
@@ -1204,52 +1365,58 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                 </table>
               </div>
 
-              <p className="text-[11px] text-slate-600 italic bg-slate-50 p-2 rounded border border-slate-200">
+              <p className="text-[10px] text-slate-600 italic bg-slate-50 px-2 py-1 rounded border border-slate-200">
                 {getWorstQuestionsObservation()}
               </p>
             </section>
 
             {/* Section 8: Síntese Técnica dos Resultados */}
-            <section className="space-y-1.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
-                <FileText className="text-[#2D6A4F]" size={16} />
-                <h2 className="text-sm font-bold text-slate-900 tracking-normal">8. SÍNTESE TÉCNICA DOS RESULTADOS</h2>
+            <section className="space-y-1">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-0.5">
+                <FileText className="text-[#2D6A4F]" size={15} />
+                <h2 className="text-xs font-bold text-slate-900 tracking-normal">8. SÍNTESE TÉCNICA DOS RESULTADOS</h2>
               </div>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 leading-relaxed space-y-1.5">
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[10.5px] text-slate-700 leading-relaxed space-y-1">
                 <p>
                   A avaliação realizada com <strong>{evaluatedEmployees} colaboradores</strong> ({unitText}), correspondente a uma taxa de adesão de <strong>{adherenceRate}% do quadro efetivo</strong> ({totalEmployees} colaboradores no total), demonstra um cenário geral <strong>{overallFavScore >= 67 ? 'predominantemente favorável' : overallFavScore >= 40 ? 'em estado de atenção moderada' : 'em nível crítico de risco'}</strong> (índice global de <strong>{overallFavScore} pts</strong>) nas dimensões avaliadas pelo instrumento HSE-IT conforme a NR-1.
                 </p>
                 <p>
-                  Entretanto, os resultados evidenciam que os principais pontos que requerem monitoramento e intervenção preventiva concentram-se em <strong>{lowestDimsText}</strong>, refletindo temas prioritários levantados pelos respondentes{topCriticalThemes.length > 0 ? `, tais como: ${topCriticalThemes.join(', ')}` : ''}.
+                  Os principais pontos que requerem monitoramento e intervenção preventiva concentram-se em <strong>{lowestDimsText}</strong>, refletindo temas prioritários levantados pelos respondentes{topCriticalThemes.length > 0 ? `, tais como: ${topCriticalThemes.join(', ')}` : ''}.
                 </p>
                 <p>
                   {moralRate > 0 || sexualRate > 0 ? (
                     <>
-                      Destaca-se ainda a presença de indicadores críticos de conduta que demandam atenção institucional: registrou-se taxa de relato de <strong>{moralRate.toFixed(1)}% para assédio moral</strong> ({moralAffected} participante{moralAffected !== 1 ? 's' : ''}) e <strong>{sexualRate.toFixed(1)}% para assédio sexual</strong> ({sexualAffected} participante{sexualAffected !== 1 ? 's' : ''}){moralHighestDept || sexualHighestDept ? `, com maior concentração observada no setor de <strong>{(moralHighestDept || sexualHighestDept)?.departmentName}</strong>` : ''}. Esses índices constituem sinais de alerta para aprofundamento da análise organizacional e fortalecimento imediato dos canais confidenciais de acolhimento e denúncia.
+                      Destaca-se a presença de indicadores críticos de conduta: registrou-se taxa de relato de <strong>{moralRate.toFixed(1)}% para assédio moral</strong> ({moralAffected} participante{moralAffected !== 1 ? 's' : ''}) e <strong>{sexualRate.toFixed(1)}% para assédio sexual</strong> ({sexualAffected} participante{sexualAffected !== 1 ? 's' : ''})
+                      {(moralHighestDept || sexualHighestDept) && (
+                        <span>, com maior concentração no setor de <strong>{(moralHighestDept || sexualHighestDept)?.departmentName}</strong></span>
+                      )}. Esses índices constituem sinais de alerta para fortalecimento contínuo dos canais confidenciais de acolhimento.
                     </>
                   ) : (
                     <>
-                      Os indicadores críticos de conduta (assédio moral e assédio sexual) apresentaram taxas nulas (0%) ou estritamente dentro da faixa de baixo risco / favorável, recomendando-se a manutenção ativa dos canais confidenciais e das diretrizes de ética e integridade.
+                      Os indicadores críticos de conduta (assédio moral e assédio sexual) apresentaram taxas nulas (0%) ou estritamente dentro da faixa de baixo risco / favorável, recomendando-se a manutenção ativa dos canais confidenciais e das diretrizes éticas.
                     </>
                   )}
                 </p>
                 {largestDept && (
                   <p>
-                    No setor de <strong>{largestDept.departmentName}</strong>, que representa a maior parcela da amostra avaliada ({largestDept.respondentsCount} colaboradores, {largestDept.percentageOfTotal?.toFixed(1) || Math.round((largestDept.respondentsCount / (evaluatedEmployees || 1)) * 100)}% do total), os resultados apontam maior necessidade de atenção e acompanhamento para <strong>{largestDeptLowestDims.length > 0 ? largestDeptLowestDims.map(d => d.dimensionName).join(' e ') : 'as rotinas de trabalho e relações interpessoais'}</strong>.
+                    No setor de <strong>{largestDept.departmentName}</strong>, que representa a maior parcela da amostra avaliada ({largestDept.respondentsCount} colaboradores, {largestDept.percentageOfTotal?.toFixed(1) || Math.round((largestDept.respondentsCount / (evaluatedEmployees || 1)) * 100)}% do total), recomenda-se acompanhamento prioritário para <strong>{largestDeptLowestDims.length > 0 ? largestDeptLowestDims.map(d => d.dimensionName).join(' e ') : 'as rotinas operacionais e relações interpessoais'}</strong>.
                   </p>
                 )}
               </div>
             </section>
 
             {/* Section 9: Considerações Finais */}
-            <section className="space-y-1.5">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
-                <ShieldCheck className="text-[#2D6A4F]" size={16} />
-                <h2 className="text-sm font-bold text-slate-900 tracking-normal">9. CONSIDERAÇÕES FINAIS</h2>
+            <section className="space-y-1">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-0.5">
+                <ShieldCheck className="text-[#2D6A4F]" size={15} />
+                <h2 className="text-xs font-bold text-slate-900 tracking-normal">9. CONSIDERAÇÕES FINAIS & ENCAMINHAMENTO PGR</h2>
               </div>
-              <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg text-xs text-slate-700 leading-relaxed space-y-1.5">
+              <div className="p-2.5 bg-emerald-50/60 border border-emerald-200 rounded-lg text-[10.5px] text-slate-700 leading-relaxed space-y-1">
                 <p>
-                  Os resultados obtidos constituem subsídio técnico fundamental para o direcionamento das ações preventivas e de melhoria contínua na <strong>{companyDisplayName}</strong>. De modo geral, o diagnóstico aponta {overallFavScore >= 67 ? 'uma base organizacional sólida com indicadores favoráveis em grande parte das dimensões avaliadas' : 'oportunidades de melhoria estruturada no clima psicossocial'}, concentrando-se as prioridades de intervenção nas dimensões de <strong>{lowestDimsText}</strong>{attentionDepts.length > 0 ? `, com atenção dirigida especialmente ao(s) setor(es) de <strong>{attentionDepts.map(d => d.departmentName).join(', ')}</strong>` : ''}.
+                  Os resultados obtidos constituem subsídio técnico fundamental para o direcionamento das ações preventivas e de melhoria contínua na <strong>{companyDisplayName}</strong>. De modo geral, o diagnóstico aponta {overallFavScore >= 67 ? 'uma base organizacional sólida com indicadores favoráveis em grande parte das dimensões avaliadas' : 'oportunidades de melhoria estruturada no clima psicossocial'}, concentrando-se as prioridades de intervenção nas dimensões de <strong>{lowestDimsText}</strong>
+                  {attentionDepts.length > 0 && (
+                    <span>, com atenção dirigida especialmente ao(s) setor(es) de <strong>{attentionDepts.map(d => d.departmentName).join(', ')}</strong></span>
+                  )}.
                 </p>
                 <p>
                   Recomenda-se formalmente que as conclusões deste diagnóstico sejam incorporadas ao Gerenciamento de Riscos Ocupacionais (GRO) e ao Programa de Gerenciamento de Riscos (PGR) da organização, servindo como base técnica para a consolidação e execução do <strong>Plano de Ação {referenceYear}</strong>, com metas estabelecidas, cronograma, gestores responsáveis e indicadores de eficácia.
@@ -1259,31 +1426,10 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
                 </p>
               </div>
             </section>
-
-            {/* Signatures Block */}
-            <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-8 text-center text-xs">
-              <div className="space-y-1 flex flex-col items-center">
-                <div className="w-48 h-8 border-b border-slate-900 flex items-end justify-center pb-0.5">
-                  <span className="font-serif italic text-slate-700 text-xs">Assinado digitalmente</span>
-                </div>
-                <p className="font-bold text-slate-900 text-xs">{profile.name}</p>
-                <p className="text-slate-600 text-[10px] font-medium">{profile.councilRegister}</p>
-                <p className="text-slate-400 text-[9px]">Responsável Técnico pelo Diagnóstico</p>
-              </div>
-
-              <div className="space-y-1 flex flex-col items-center">
-                <div className="w-48 h-8 border-b border-slate-900 flex items-end justify-center pb-0.5">
-                  <span className="font-serif italic text-slate-700 text-xs">{company.rhContactName?.split(' ')[0] || 'Gestão de SST'}</span>
-                </div>
-                <p className="font-bold text-slate-900 text-xs">{company.rhContactName || 'Diretoria / Gestão de Gente'}</p>
-                <p className="text-slate-600 text-[10px] font-medium">{company.tradeName}</p>
-                <p className="text-slate-400 text-[9px]">Representante Legal da Empresa</p>
-              </div>
-            </div>
           </div>
 
           {/* Page 5 Footer */}
-          <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+          <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
             <span>Laudo Regulatório NR-01 • Validade: 12 meses</span>
             <span className="font-bold text-slate-600">Página 5 de 5</span>
           </div>
@@ -1318,6 +1464,195 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
           )}
         </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: GALERIA DE IMAGENS / LOGOTIPOS                                      */}
+      {/* ========================================================================= */}
+      {isGalleryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#2D6A4F] flex items-center justify-center">
+                  <ImageIcon size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Galeria de Imagens do Laudo</h3>
+                  <p className="text-xs text-slate-500">Selecione o logotipo da consultoria ou envie um novo arquivo</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsGalleryModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-200/60 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Success message banner */}
+            {saveSuccessMsg && (
+              <div className="bg-emerald-50 border-b border-emerald-200 text-emerald-800 text-xs px-5 py-2.5 flex items-center gap-2 font-semibold animate-in slide-in-from-top-2">
+                <CheckCircle size={15} />
+                <span>{saveSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Controls Bar */}
+            <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-3 items-center justify-between bg-white">
+              
+              {/* Search */}
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar na galeria..."
+                  value={gallerySearch}
+                  onChange={(e) => setGallerySearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                />
+              </div>
+
+              {/* Upload Button */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  onChange={handleUploadNewLogo}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingLogo}
+                  className="flex items-center gap-1.5 bg-[#2D6A4F] hover:bg-[#3A5A40] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingLogo ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" /> Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud size={14} /> Enviar Nova Imagem
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={loadGalleryFiles}
+                  disabled={isLoadingGallery}
+                  title="Atualizar lista da nuvem"
+                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                >
+                  <RefreshCw size={14} className={isLoadingGallery ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* Gallery Grid */}
+            <div className="p-5 overflow-y-auto flex-1 bg-slate-50/50">
+              
+              {isLoadingGallery ? (
+                <div className="py-16 text-center text-slate-400 space-y-2">
+                  <Loader2 size={24} className="animate-spin mx-auto text-[#2D6A4F]" />
+                  <p className="text-xs font-medium">Buscando imagens da galeria...</p>
+                </div>
+              ) : filteredGalleryFiles.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 space-y-3 bg-white rounded-xl border border-dashed border-slate-200 p-6">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                    <ImageIcon size={24} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-700">Nenhuma imagem encontrada</p>
+                    <p className="text-[11px] text-slate-500">Faça o upload de uma imagem com o logotipo para utilizar no cabeçalho do laudo.</p>
+                  </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2D6A4F] bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                  >
+                    <UploadCloud size={14} /> Selecionar Arquivo do Computador
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+                  {filteredGalleryFiles.map((file) => {
+                    const isCurrent = reportLogoUrl === file.url;
+                    return (
+                      <div 
+                        key={file.id}
+                        onClick={() => handleSelectLogoFromGallery(file.url)}
+                        className={`group relative bg-white rounded-xl border p-3 flex flex-col items-center justify-between gap-2 cursor-pointer transition-all hover:shadow-md ${
+                          isCurrent 
+                            ? 'border-[#2D6A4F] ring-2 ring-[#2D6A4F]/20 bg-emerald-50/30' 
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {isCurrent && (
+                          <span className="absolute top-2 right-2 bg-[#2D6A4F] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs">
+                            <Check size={10} /> Ativo
+                          </span>
+                        )}
+                        <div className="h-20 w-full flex items-center justify-center p-1 bg-slate-50 rounded-lg overflow-hidden border border-slate-100">
+                          <img 
+                            src={file.url} 
+                            alt={file.name} 
+                            crossOrigin="anonymous"
+                            className="max-h-full max-w-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <div className="w-full text-center">
+                          <p className="text-[11px] font-bold text-slate-800 truncate" title={file.name}>
+                            {file.name}
+                          </p>
+                          <span className="text-[9.5px] text-slate-400">
+                            {file.bucket}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`w-full py-1 text-[11px] font-bold rounded transition-colors ${
+                            isCurrent 
+                              ? 'bg-[#2D6A4F] text-white' 
+                              : 'bg-slate-100 text-slate-700 group-hover:bg-[#2D6A4F] group-hover:text-white'
+                          }`}
+                        >
+                          {isCurrent ? 'Selecionado' : 'Usar no Laudo'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50/70 text-xs">
+              <div className="flex items-center gap-2">
+                {reportLogoUrl && (
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="text-red-600 hover:text-red-700 flex items-center gap-1 font-semibold hover:underline"
+                  >
+                    <Trash2 size={13} /> Remover Logotipo
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setIsGalleryModalOpen(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

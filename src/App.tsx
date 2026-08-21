@@ -556,6 +556,7 @@ export default function App() {
               profile={profile}
               selectedCompanyId={selectedCompanyId}
               onNavigate={handleNavigate}
+              onUpdateProfile={handleSaveProfile}
             />
           )}
 

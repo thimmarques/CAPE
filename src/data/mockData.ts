@@ -8,7 +8,6 @@ export const MOCK_PROFILE: ProfessionalProfile = {
   specialty: 'Psicologia Ocupacional, Ergonomia e Avaliação de Riscos Psicossociais (NR-01)',
   email: 'contato@psicorisk-analytics.com.br',
   phone: '(11) 3288-9000',
-  signatureUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&auto=format&fit=crop&q=80',
   consultancyName: 'Consultoria Especializada em Saúde Ocupacional & Psicologia do Trabalho',
   consultancyLogoUrl: ''
 };

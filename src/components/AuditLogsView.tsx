@@ -116,7 +116,6 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ currentUser, onNav
         return { bg: 'bg-purple-50 text-purple-700 border-purple-200', label: 'Exportação PDF' };
       case 'UPLOAD_LOGO':
       case 'UPLOAD_AVATAR':
-      case 'UPLOAD_SIGNATURE':
         return { bg: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Upload Storage' };
       case 'UPDATE_PROFILE':
         return { bg: 'bg-cyan-50 text-cyan-700 border-cyan-200', label: 'Perfil Atualizado' };

@@ -100,14 +100,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
 
-  const handleClearProfileSignature = async () => {
-    const updated = { ...formData, signatureUrl: undefined };
-    setFormData(updated);
-    await onSaveProfile(updated);
-    setProfileSuccessMsg('Assinatura técnica removida do perfil.');
-    setTimeout(() => setProfileSuccessMsg(''), 3000);
-  };
-
   // Handlers de Upload
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -147,13 +139,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         setUploadedResultUrl(result.publicUrl);
         await loadStoredFiles();
 
-        // Se for upload de logo ou assinatura, aplica automaticamente no perfil
+        // Se for upload de logo, aplica automaticamente no perfil
         if (selectedBucket === 'company-assets') {
           const updated = { ...formData, consultancyLogoUrl: result.publicUrl };
-          setFormData(updated);
-          await onSaveProfile(updated);
-        } else if (selectedBucket === 'signatures') {
-          const updated = { ...formData, signatureUrl: result.publicUrl };
           setFormData(updated);
           await onSaveProfile(updated);
         }
@@ -188,14 +176,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const res = await dbService.deleteImage(fileToDelete.bucket, fileToDelete.id);
       
       if (res.success) {
-        // Se a imagem deletada for a logo ou assinatura ativa no perfil, limpa a referência
+        // Se a imagem deletada for a logo ativa no perfil, limpa a referência
         if (formData.consultancyLogoUrl === fileToDelete.url) {
           const updated = { ...formData, consultancyLogoUrl: undefined };
-          setFormData(updated);
-          await onSaveProfile(updated);
-        }
-        if (formData.signatureUrl === fileToDelete.url) {
-          const updated = { ...formData, signatureUrl: undefined };
           setFormData(updated);
           await onSaveProfile(updated);
         }
@@ -230,12 +213,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     let updated: ProfessionalProfile = { ...formData };
     if (bucket === 'company-assets') {
       updated.consultancyLogoUrl = url;
-    } else if (bucket === 'signatures') {
-      updated.signatureUrl = url;
     }
     setFormData(updated);
     await onSaveProfile(updated);
-    setProfileSuccessMsg(`Recurso vinculado ao Perfil do Laudo com sucesso!`);
+    setProfileSuccessMsg(`Logotipo vinculado ao Perfil do Laudo com sucesso!`);
     setTimeout(() => setProfileSuccessMsg(''), 3000);
   };
 
@@ -535,15 +516,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Imagens Vinculadas no Perfil: Logo e Assinatura com opção de Excluir/Remover */}
-                <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Imagens Vinculadas no Perfil: Logo com opção de Excluir/Remover */}
+                <div className="pt-4 border-t border-slate-100">
                   
                   {/* Logotipo da Consultoria */}
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <Building2 size={14} className="text-emerald-600" />
-                        Logotipo da Consultoria
+                        Logotipo da Consultoria / Emissor
                       </span>
                       {formData.consultancyLogoUrl && (
                         <button
@@ -559,19 +540,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     {formData.consultancyLogoUrl ? (
-                      <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200">
+                      <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
                         <img 
                           src={formData.consultancyLogoUrl} 
                           alt="Logo" 
-                          className="w-12 h-12 object-contain bg-slate-50 rounded border p-0.5 shrink-0" 
+                          className="w-14 h-14 object-contain bg-slate-50 rounded border p-1 shrink-0" 
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[11px] font-bold text-slate-700 truncate">Logotipo Ativo no Laudo</p>
+                          <p className="text-xs font-bold text-slate-700 truncate">Logotipo Ativo no Cabeçalho do Laudo</p>
                           <p className="text-[10px] text-slate-400 truncate font-mono">{formData.consultancyLogoUrl}</p>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[11px] text-slate-400 italic">Nenhum logotipo vinculado ao perfil.</p>
+                      <p className="text-xs text-slate-400 italic">Nenhum logotipo vinculado ao perfil técnico.</p>
                     )}
 
                     <button
@@ -580,59 +561,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         setSelectedBucket('company-assets');
                         setActiveTab('storage');
                       }}
-                      className="w-full py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                      className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <UploadCloud size={13} />
-                      <span>{formData.consultancyLogoUrl ? 'Trocar Logotipo no Storage' : 'Adicionar Logotipo via Storage'}</span>
-                    </button>
-                  </div>
-
-                  {/* Assinatura Técnica */}
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <PenTool size={14} className="text-emerald-600" />
-                        Assinatura Digitalizada
-                      </span>
-                      {formData.signatureUrl && (
-                        <button
-                          type="button"
-                          onClick={handleClearProfileSignature}
-                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1 hover:underline"
-                          title="Remover assinatura do perfil"
-                        >
-                          <Trash2 size={12} />
-                          <span>Remover</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {formData.signatureUrl ? (
-                      <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200">
-                        <img 
-                          src={formData.signatureUrl} 
-                          alt="Assinatura" 
-                          className="w-12 h-12 object-contain bg-slate-50 rounded border p-0.5 shrink-0" 
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] font-bold text-slate-700 truncate">Assinatura Ativa no Laudo</p>
-                          <p className="text-[10px] text-slate-400 truncate font-mono">{formData.signatureUrl}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400 italic">Nenhuma assinatura vinculada ao perfil.</p>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedBucket('signatures');
-                        setActiveTab('storage');
-                      }}
-                      className="w-full py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <UploadCloud size={13} />
-                      <span>{formData.signatureUrl ? 'Trocar Assinatura no Storage' : 'Adicionar Assinatura via Storage'}</span>
+                      <UploadCloud size={14} />
+                      <span>{formData.consultancyLogoUrl ? 'Trocar Logotipo na Galeria de Storage' : 'Adicionar Logotipo da Galeria'}</span>
                     </button>
                   </div>
 
@@ -668,32 +600,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {/* Visual Profile Card Preview */}
               <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-                  Pré-visualização do Responsável no Laudo
+                  Identificação do Responsável no Laudo
                 </h3>
                 
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-3">
-                  
-                  {formData.signatureUrl ? (
-                    <div className="h-16 flex items-center justify-center border-b border-slate-200 pb-2">
-                      <img 
-                        src={formData.signatureUrl} 
-                        alt="Assinatura" 
-                        className="max-h-14 object-contain"
-                      />
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
+                      {formData.name ? formData.name.charAt(0).toUpperCase() : 'E'}
                     </div>
-                  ) : (
-                    <div className="h-14 flex items-center justify-center border-b border-dashed border-slate-300 text-[11px] text-slate-400">
-                      (Sem assinatura digitalizada vinculada)
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 text-xs truncate">{formData.name || 'Nome do Especialista'}</div>
+                      <div className="text-[11px] font-semibold text-emerald-700 font-mono">{formData.councilRegister || 'Registro no Conselho'}</div>
                     </div>
-                  )}
-
-                  <div>
-                    <div className="font-bold text-slate-900 text-xs">{formData.name || 'Nome do Especialista'}</div>
-                    <div className="text-[11px] font-semibold text-emerald-700 font-mono">{formData.councilRegister || 'Registro no Conselho'}</div>
-                    <div className="text-[10px] text-slate-500">{formData.specialty || 'Especialidade Técnica'}</div>
-                    <div className="text-[10px] text-slate-400 font-medium">{formData.consultancyName}</div>
                   </div>
 
+                  <div className="pt-2 border-t border-slate-200 text-xs space-y-1">
+                    <div className="text-slate-600 font-medium">{formData.specialty || 'Especialidade Técnica'}</div>
+                    <div className="text-[11px] text-slate-400">{formData.consultancyName}</div>
+                    {formData.email && <div className="text-[10px] text-slate-400 font-mono truncate">{formData.email}</div>}
+                  </div>
                 </div>
 
                 <div className="mt-3">
@@ -702,8 +627,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => setActiveTab('storage')}
                     className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <PenTool size={13} />
-                    <span>Gerenciar Imagens na Central de Storage</span>
+                    <UploadCloud size={13} />
+                    <span>Gerenciar Logotipos e Documentos no Storage</span>
                   </button>
                 </div>
 
@@ -729,13 +654,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="text-xs space-y-1">
               <p className="font-bold">Gerenciamento de Imagens e Arquivos do Sistema:</p>
               <p className="text-emerald-800 leading-relaxed">
-                Faça upload de novos logotipos, assinaturas digitais e laudos, ou <strong>exclua definitivamente as imagens que não desejar mais</strong>. As fotos de avatar dos usuários são vinculadas automaticamente à conta Google/Gmail de login, sem necessidade de armazenamento adicional.
+                Faça upload de novos logotipos de empresas e consultorias, laudos e anexos, ou <strong>exclua definitivamente as imagens que não desejar mais</strong>. As fotos de avatar dos usuários são vinculadas automaticamente à conta Google/Gmail de login.
               </p>
             </div>
           </div>
 
           {/* Bucket Category Selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             <button
               onClick={() => setSelectedBucket('company-assets')}
@@ -749,21 +674,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div>
                 <div className="font-bold text-xs text-slate-900">Logotipos de Empresas & Consultoria</div>
                 <div className="text-[10px] text-slate-500 font-mono">company-assets</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setSelectedBucket('signatures')}
-              className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                selectedBucket === 'signatures'
-                  ? 'bg-emerald-50 border-emerald-500 shadow-xs'
-                  : 'bg-white border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <PenTool className={`w-6 h-6 mb-2 ${selectedBucket === 'signatures' ? 'text-emerald-700' : 'text-slate-500'}`} />
-              <div>
-                <div className="font-bold text-xs text-slate-900">Assinaturas Técnicas Digitais</div>
-                <div className="text-[10px] text-slate-500 font-mono">signatures</div>
               </div>
             </button>
 
@@ -933,7 +843,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 >
                   <option value="ALL">Todos os Buckets</option>
                   <option value="company-assets">Logotipos (company-assets)</option>
-                  <option value="signatures">Assinaturas (signatures)</option>
                   <option value="reports">Documentos (reports)</option>
                 </select>
               </div>
@@ -956,7 +865,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredFiles.map((file) => {
                   const isCurrentlyLogo = formData.consultancyLogoUrl === file.url;
-                  const isCurrentlySignature = formData.signatureUrl === file.url;
 
                   return (
                     <div 
@@ -976,9 +884,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         )}
 
                         {/* Badges de Uso */}
-                        {(isCurrentlyLogo || isCurrentlySignature) && (
+                        {isCurrentlyLogo && (
                           <span className="absolute top-2 left-2 px-2 py-0.5 bg-emerald-600 text-white text-[9px] font-bold rounded-md shadow-xs">
-                            {isCurrentlyLogo ? 'Logo Ativo' : 'Assinatura Ativa'}
+                            Logo Ativo
                           </span>
                         )}
 
@@ -1011,10 +919,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between gap-1.5">
                         
                         {/* Vincular ao Perfil */}
-                        {(file.bucket === 'company-assets' || file.bucket === 'signatures') && (
+                        {file.bucket === 'company-assets' && (
                           <button
                             onClick={() => applyAssetToProfile(file.bucket, file.url)}
-                            title={file.bucket === 'company-assets' ? 'Definir como Logotipo da Consultoria' : 'Definir como Assinatura do Laudo'}
+                            title="Definir como Logotipo da Consultoria"
                             className="px-2 py-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors flex-1 text-center truncate"
                           >
                             Usar no Laudo

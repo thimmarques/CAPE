@@ -14,9 +14,10 @@ interface ReportsViewProps {
   profile: ProfessionalProfile;
   selectedCompanyId?: string;
   onNavigate?: (view: 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment', companyId?: string) => void;
+  onUpdateProfile?: (updated: ProfessionalProfile) => void;
 }
 
-export function ReportsView({ companies, sessions = [], profile, selectedCompanyId: initialCompanyId, onNavigate }: ReportsViewProps) {
+export function ReportsView({ companies, sessions = [], profile, selectedCompanyId: initialCompanyId, onNavigate, onUpdateProfile }: ReportsViewProps) {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(initialCompanyId || 'all');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingReportCompany, setViewingReportCompany] = useState<Company | null>(() => {
@@ -66,6 +67,7 @@ export function ReportsView({ companies, sessions = [], profile, selectedCompany
         analytics={liveAnalytics}
         profile={profile}
         autoPrint={autoPrintReport}
+        onUpdateProfile={onUpdateProfile}
         onBack={() => {
           setViewingReportCompany(null);
           setAutoPrintReport(false);
@@ -82,7 +84,7 @@ export function ReportsView({ companies, sessions = [], profile, selectedCompany
         <div>
           <h1 className="text-2xl font-bold text-[#1E293B] tracking-tight">Relatórios & Laudos Técnicos (PDF)</h1>
           <p className="text-sm text-slate-500">
-            Documentação técnica oficial para o PGR (NR-01) com parecer pericial psicossocial e assinatura profissional.
+            Documentação técnica oficial para o PGR (NR-01) com parecer pericial psicossocial e homologação técnica.
           </p>
         </div>
       </div>

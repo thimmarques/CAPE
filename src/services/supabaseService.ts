@@ -225,7 +225,6 @@ const mapDbProfileToApp = (dbRow: any): ProfessionalProfile => {
     specialty: dbRow.specialty,
     email: dbRow.email,
     phone: dbRow.phone,
-    signatureUrl: dbRow.signature_url || undefined,
     consultancyName: dbRow.consultancy_name,
     consultancyLogoUrl: dbRow.consultancy_logo_url || undefined,
   };
@@ -239,7 +238,6 @@ const mapAppProfileToDb = (profile: ProfessionalProfile) => {
     specialty: profile.specialty,
     email: profile.email,
     phone: profile.phone,
-    signature_url: profile.signatureUrl || null,
     consultancy_name: profile.consultancyName,
     consultancy_logo_url: profile.consultancyLogoUrl || null,
   };
@@ -738,7 +736,7 @@ export const dbService = {
       try {
         const bucketsToList: StorageBucketName[] = bucket
           ? [bucket]
-          : ['company-assets', 'signatures', 'reports', 'user-avatars'];
+          : ['company-assets', 'reports', 'user-avatars'];
 
         const cloudItems: StoredFileItem[] = [];
 
@@ -839,7 +837,7 @@ export const dbService = {
           setLocalStoredFiles([newFileItem, ...currentFiles.filter(f => f.url !== publicUrl)]);
 
           await auditService.logActivity({
-            action: bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+            action: 'UPLOAD_LOGO',
             entityType: 'storage',
             entityId: cleanPath,
             entityName: `${bucket}/${cleanPath}`,
@@ -873,7 +871,7 @@ export const dbService = {
         setLocalStoredFiles([newFileItem, ...currentFiles.filter(f => f.name !== fileName)]);
 
         await auditService.logActivity({
-          action: bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+          action: 'UPLOAD_LOGO',
           entityType: 'storage',
           entityId: pathName,
           entityName: `${bucket}/${pathName} (Local Base64)`,

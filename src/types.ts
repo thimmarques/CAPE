@@ -28,7 +28,6 @@ export interface ProfessionalProfile {
   specialty: string; // ex: Psicologia Ocupacional e Saúde do Trabalho
   email: string;
   phone: string;
-  signatureUrl?: string;
   consultancyName: string;
   consultancyLogoUrl?: string;
 }
@@ -251,7 +250,7 @@ export interface AnalyticsReport {
   }[];
 }
 
-export type StorageBucketName = 'company-assets' | 'signatures' | 'reports' | 'user-avatars';
+export type StorageBucketName = 'company-assets' | 'reports' | 'user-avatars';
 
 export interface StoredFileItem {
   id: string;
@@ -315,7 +314,6 @@ export type AuditAction =
   | 'UPDATE_USER'
   | 'UPLOAD_LOGO'
   | 'UPLOAD_AVATAR'
-  | 'UPLOAD_SIGNATURE'
   | 'DELETE_STORAGE_FILE'
   | 'DELETE_IMAGE'
   | 'SYSTEM_CONFIG_UPDATE';
