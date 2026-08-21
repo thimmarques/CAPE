@@ -251,7 +251,17 @@ export interface AnalyticsReport {
   }[];
 }
 
-export type StorageBucketName = 'company-assets' | 'user-avatars' | 'signatures' | 'reports';
+export type StorageBucketName = 'company-assets' | 'signatures' | 'reports' | 'user-avatars';
+
+export interface StoredFileItem {
+  id: string;
+  bucket: StorageBucketName;
+  name: string;
+  url: string;
+  path?: string;
+  sizeBytes?: number;
+  createdAt: string;
+}
 
 export interface SavedTechnicalReport {
   id: string;
@@ -306,6 +316,8 @@ export type AuditAction =
   | 'UPLOAD_LOGO'
   | 'UPLOAD_AVATAR'
   | 'UPLOAD_SIGNATURE'
+  | 'DELETE_STORAGE_FILE'
+  | 'DELETE_IMAGE'
   | 'SYSTEM_CONFIG_UPDATE';
 
 export interface AuditLogEntry {

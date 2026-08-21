@@ -4,6 +4,9 @@ import { CompaniesView } from './components/CompaniesView';
 import { QuestionnairesView } from './components/QuestionnairesView';
 import { ReportsView } from './components/ReportsView';
 import { AssessmentView } from './components/AssessmentView';
+import { AuditLogsView } from './components/AuditLogsView';
+import { TeamView } from './components/TeamView';
+import { SettingsView } from './components/SettingsView';
 import { ProfileSettingsModal } from './components/ProfileSettingsModal';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { LoginView } from './components/LoginView';
@@ -16,10 +19,10 @@ import {
   LayoutDashboard, 
   Building2, Download, Menu, X, 
   Layers, LogOut, ShieldCheck, Database, Cloud, CloudOff, RefreshCw,
-  Crown, UserCheck, Lock
+  Crown, UserCheck, Lock, Users, Activity, Settings as SettingsIcon
 } from 'lucide-react';
 
-type AppView = 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment';
+type AppView = 'dashboard' | 'companies' | 'questionnaires' | 'reports' | 'assessment' | 'team' | 'settings' | 'audit';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -166,6 +169,9 @@ export default function App() {
       case 'questionnaires': return 'Questionário HSE-IT';
       case 'assessment': return 'Preenchimento do Questionário HSE-IT';
       case 'reports': return 'Relatórios & Laudos Executivos (PDF)';
+      case 'team': return 'Equipe & Usuários Cadastrados';
+      case 'settings': return 'Configurações & Central de Armazenamento';
+      case 'audit': return 'Auditoria & Logs de Rastreabilidade (NR-01)';
       default: return 'PsychoRisk Analytics';
     }
   };
@@ -297,6 +303,53 @@ export default function App() {
             <span className="text-xs">Relatórios & Laudos (PDF)</span>
           </button>
 
+          <button 
+            onClick={() => handleNavigate('team')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all ${
+              currentView === 'team' 
+                ? 'bg-[#2D6A4F] text-white font-bold shadow-xs' 
+                : 'text-slate-300 hover:bg-[#2D6A4F]/20 hover:text-white font-medium'
+            }`}
+          >
+            <Users className={`w-5 h-5 ${currentView === 'team' ? 'text-white' : 'text-slate-400'}`} />
+            <span className="text-xs">Equipe & Usuários</span>
+          </button>
+
+          <button 
+            onClick={() => handleNavigate('settings')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all ${
+              currentView === 'settings' 
+                ? 'bg-[#2D6A4F] text-white font-bold shadow-xs' 
+                : 'text-slate-300 hover:bg-[#2D6A4F]/20 hover:text-white font-medium'
+            }`}
+          >
+            <SettingsIcon className={`w-5 h-5 ${currentView === 'settings' ? 'text-white' : 'text-slate-400'}`} />
+            <span className="text-xs">Configurações & Uploads</span>
+          </button>
+
+          {/* Auditoria & Logs - ONLY FOR SUPER ADMIN */}
+          {isSuperAdmin && (
+            <button 
+              onClick={() => handleNavigate('audit')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all ${
+                currentView === 'audit' 
+                  ? 'bg-amber-600/90 text-white font-bold shadow-xs' 
+                  : 'text-amber-200 hover:bg-amber-900/30 hover:text-white font-medium'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Activity className={`w-5 h-5 ${currentView === 'audit' ? 'text-white' : 'text-amber-400'}`} />
+                <span className="text-xs">Auditoria & Logs</span>
+              </div>
+              <span className="flex items-center gap-1">
+                <Crown size={12} className="text-amber-400" />
+                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300">
+                  Master
+                </span>
+              </span>
+            </button>
+          )}
+
           {/* Supabase Config Button - ONLY FOR SUPER ADMIN */}
           {isSuperAdmin && (
             <div className="pt-2">
@@ -358,8 +411,8 @@ export default function App() {
 
           <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#2D6A4F]/20">
             <button 
-              onClick={() => setIsProfileModalOpen(true)}
-              title="Configurações do Perfil do Especialista (Laudo)"
+              onClick={() => handleNavigate('settings')}
+              title="Configurações e Uploads de Logotipos/Assinaturas"
               className="text-[11px] text-slate-300 hover:text-white hover:underline transition-all"
             >
               Configuração
@@ -502,6 +555,26 @@ export default function App() {
               profile={profile}
               selectedCompanyId={selectedCompanyId}
               onNavigate={handleNavigate}
+            />
+          )}
+
+          {currentView === 'team' && (
+            <TeamView currentUser={currentUser} />
+          )}
+
+          {currentView === 'settings' && (
+            <SettingsView 
+              profile={profile}
+              currentUser={currentUser}
+              onSaveProfile={handleSaveProfile}
+              onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+            />
+          )}
+
+          {currentView === 'audit' && (
+            <AuditLogsView 
+              currentUser={currentUser}
+              onNavigateBack={() => handleNavigate('dashboard')}
             />
           )}
         </div>

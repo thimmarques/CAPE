@@ -71,9 +71,9 @@ export const authService = {
             email: user.email || email,
             name: user.user_metadata?.full_name || user.user_metadata?.name || (isSuper ? 'Thiago Marques (Super Admin)' : email.split('@')[0]),
             role: isSuper ? 'super_admin' : (user.user_metadata?.role || 'admin'),
-            avatarUrl: user.user_metadata?.avatar_url || '',
+            avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
             isSuperAdmin: isSuper,
-            provider: 'email',
+            provider: user.app_metadata?.provider === 'google' ? 'google' : 'email',
             createdAt: user.created_at,
           };
 
@@ -277,6 +277,89 @@ export const authService = {
       console.error('Erro ao ler usuário do localStorage:', e);
     }
     return null;
+  },
+
+  /**
+   * Busca todos os usuários cadastrados (da tabela user_profiles ou usuários locais)
+   */
+  async fetchUsers(): Promise<AuthUser[]> {
+    const client = getSupabaseClient();
+    const fallbackList: AuthUser[] = [
+      {
+        id: 'usr-super-admin-master',
+        email: SUPER_ADMIN_EMAIL,
+        name: 'Thiago Marques (Super Admin)',
+        role: 'super_admin',
+        isSuperAdmin: true,
+        provider: 'email',
+        createdAt: '2025-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'usr-consultant-1',
+        email: 'marcelo.fontes@occupationalhealth.com.br',
+        name: 'Dr. Marcelo Silveira Fontes',
+        role: 'consultant',
+        isSuperAdmin: false,
+        provider: 'email',
+        createdAt: '2025-01-15T10:30:00.000Z',
+      },
+      {
+        id: 'usr-evaluator-1',
+        email: 'carolina.mendes@ergosaude.com.br',
+        name: 'Dra. Carolina Mendes',
+        role: 'evaluator',
+        isSuperAdmin: false,
+        provider: 'email',
+        createdAt: '2025-02-01T14:20:00.000Z',
+      },
+      {
+        id: 'usr-admin-ops',
+        email: 'operacoes@psychorisk.com.br',
+        name: 'Coordenação de Operações SST',
+        role: 'admin',
+        isSuperAdmin: false,
+        provider: 'email',
+        createdAt: '2025-02-10T09:15:00.000Z',
+      }
+    ];
+
+    if (client && isSupabaseConfigured()) {
+      try {
+        const { data, error } = await client
+          .from('user_profiles')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          const list: AuthUser[] = data.map((u: any) => ({
+            id: u.id,
+            email: u.email,
+            name: u.name || u.email.split('@')[0],
+            role: isSuperAdminEmail(u.email) ? 'super_admin' : (u.role || 'admin'),
+            avatarUrl: u.avatar_url || '',
+            isSuperAdmin: isSuperAdminEmail(u.email),
+            provider: 'email',
+            createdAt: u.created_at,
+          }));
+
+          // Garantir que o super admin está presente
+          if (!list.some(u => isSuperAdminEmail(u.email))) {
+            list.unshift(fallbackList[0]);
+          }
+          return list;
+        }
+      } catch (err) {
+        console.error('Erro ao buscar lista de usuários no Supabase:', err);
+      }
+    }
+
+    // Inclui usuário logado se for novo
+    const current = this.getLocalUser();
+    if (current && !fallbackList.some(u => u.email.toLowerCase() === current.email.toLowerCase())) {
+      fallbackList.push(current);
+    }
+
+    return fallbackList;
   },
 
   setLocalUser(user: AuthUser): void {

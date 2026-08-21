@@ -5,7 +5,8 @@ import {
   ProfessionalProfile, 
   SavedTechnicalReport, 
   QuestionnaireTemplate,
-  StorageBucketName
+  StorageBucketName,
+  StoredFileItem
 } from '../types';
 import { MOCK_COMPANIES, MOCK_SESSIONS, MOCK_PROFILE } from '../data/mockData';
 import { auditService } from './auditService';
@@ -17,6 +18,44 @@ const LOCAL_STORAGE_KEYS = {
   PROFILE: 'psychorisk_profile_v1',
   REPORTS: 'psychorisk_saved_reports_v1',
   TEMPLATES: 'psychorisk_templates_v1',
+  STORAGE_FILES: 'psychorisk_storage_files_v1',
+};
+
+const DEFAULT_STORAGE_FILES: StoredFileItem[] = [
+  {
+    id: 'file-default-logo-1',
+    bucket: 'company-assets',
+    name: 'Logo Consultoria SST (Padrão)',
+    url: 'https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=400&auto=format&fit=crop&q=80',
+    path: 'default_consultancy_logo.png',
+    createdAt: '2025-01-10T10:00:00.000Z',
+  },
+  {
+    id: 'file-default-sig-1',
+    bucket: 'signatures',
+    name: 'Assinatura Técnica Digitalizada',
+    url: 'https://api.dicebear.com/7.x/initials/svg?seed=Assinatura+Tecnica',
+    path: 'default_signature.svg',
+    createdAt: '2025-01-15T14:30:00.000Z',
+  }
+];
+
+export const getLocalStoredFiles = (): StoredFileItem[] => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEYS.STORAGE_FILES);
+    if (data) return JSON.parse(data);
+  } catch (e) {
+    console.error('Erro ao ler arquivos do localStorage:', e);
+  }
+  return DEFAULT_STORAGE_FILES;
+};
+
+export const setLocalStoredFiles = (files: StoredFileItem[]): void => {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.STORAGE_FILES, JSON.stringify(files));
+  } catch (e) {
+    console.error('Erro ao salvar arquivos no localStorage:', e);
+  }
 };
 
 // ==========================================
@@ -708,13 +747,21 @@ export const dbService = {
     }
   },
 
-  // STORAGE / UPLOAD DE ARQUIVOS (FOTOS, LOGOS, ASSINATURAS)
+  // STORAGE / UPLOAD & EXCLUSÃO DE ARQUIVOS (LOGOS, ASSINATURAS, DOCUMENTOS)
+  async listUploadedFiles(bucket?: StorageBucketName): Promise<StoredFileItem[]> {
+    const local = getLocalStoredFiles();
+    return bucket ? local.filter(f => f.bucket === bucket) : local;
+  },
+
   async uploadImage(
     bucket: StorageBucketName,
     file: File | Blob,
     pathName: string
-  ): Promise<{ publicUrl: string | null; error?: string }> {
+  ): Promise<{ publicUrl: string | null; fileItem?: StoredFileItem; error?: string }> {
     const client = getSupabaseClient();
+    const fileName = file instanceof File ? file.name : `${pathName}.png`;
+    const fileSize = file instanceof File ? file.size : undefined;
+    const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
     // Se Supabase estiver conectado, envia para o bucket do Storage
     if (client && isSupabaseConfigured()) {
@@ -734,15 +781,29 @@ export const dbService = {
         } else if (data?.path) {
           const { data: { publicUrl } } = client.storage.from(bucket).getPublicUrl(data.path);
           
+          const newFileItem: StoredFileItem = {
+            id: fileId,
+            bucket,
+            name: fileName,
+            url: publicUrl,
+            path: data.path,
+            sizeBytes: fileSize,
+            createdAt: new Date().toISOString(),
+          };
+
+          // Salva no registro de arquivos
+          const currentFiles = getLocalStoredFiles();
+          setLocalStoredFiles([newFileItem, ...currentFiles.filter(f => f.url !== publicUrl)]);
+
           await auditService.logActivity({
-            action: bucket === 'user-avatars' ? 'UPLOAD_AVATAR' : bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+            action: bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
             entityType: 'storage',
             entityId: cleanPath,
             entityName: `${bucket}/${cleanPath}`,
-            details: { bucket, path: cleanPath, publicUrl }
+            details: { bucket, path: cleanPath, publicUrl, fileName, fileSize }
           });
 
-          return { publicUrl };
+          return { publicUrl, fileItem: newFileItem };
         }
       } catch (err: any) {
         console.error('Exceção no upload para o Supabase Storage:', err);
@@ -754,19 +815,94 @@ export const dbService = {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64Url = reader.result as string;
+        
+        const newFileItem: StoredFileItem = {
+          id: fileId,
+          bucket,
+          name: fileName,
+          url: base64Url,
+          path: pathName,
+          sizeBytes: fileSize,
+          createdAt: new Date().toISOString(),
+        };
+
+        const currentFiles = getLocalStoredFiles();
+        setLocalStoredFiles([newFileItem, ...currentFiles.filter(f => f.name !== fileName)]);
+
         await auditService.logActivity({
-          action: bucket === 'user-avatars' ? 'UPLOAD_AVATAR' : bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
+          action: bucket === 'signatures' ? 'UPLOAD_SIGNATURE' : 'UPLOAD_LOGO',
           entityType: 'storage',
           entityId: pathName,
           entityName: `${bucket}/${pathName} (Local Base64)`,
-          details: { bucket, fallback: true }
+          details: { bucket, fallback: true, fileName }
         });
-        resolve({ publicUrl: base64Url });
+
+        resolve({ publicUrl: base64Url, fileItem: newFileItem });
       };
       reader.onerror = () => {
         resolve({ publicUrl: null, error: 'Falha ao converter imagem para base64.' });
       };
       reader.readAsDataURL(file);
     });
+  },
+
+  /**
+   * Exclui permanentemente uma imagem/arquivo do Storage e do catálogo local
+   */
+  async deleteImage(
+    bucket: StorageBucketName,
+    fileIdOrUrlOrPath: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const currentFiles = getLocalStoredFiles();
+      const targetFile = currentFiles.find(
+        f => f.id === fileIdOrUrlOrPath || f.url === fileIdOrUrlOrPath || f.path === fileIdOrUrlOrPath
+      );
+
+      const filePath = targetFile?.path || (
+        fileIdOrUrlOrPath.includes('/') ? fileIdOrUrlOrPath.split('/').pop() : fileIdOrUrlOrPath
+      );
+
+      // 1. Deletar do Supabase Storage se conectado
+      const client = getSupabaseClient();
+      if (client && isSupabaseConfigured() && filePath) {
+        try {
+          const { error } = await client.storage
+            .from(bucket)
+            .remove([filePath]);
+
+          if (error) {
+            console.warn(`Erro ao excluir arquivo do Supabase Storage (${bucket}/${filePath}):`, error.message);
+          }
+        } catch (storageErr) {
+          console.warn('Exceção ao remover arquivo do Supabase Storage:', storageErr);
+        }
+      }
+
+      // 2. Remover do catálogo local
+      const updatedFiles = currentFiles.filter(
+        f => f.id !== fileIdOrUrlOrPath && f.url !== fileIdOrUrlOrPath && f.path !== fileIdOrUrlOrPath
+      );
+      setLocalStoredFiles(updatedFiles);
+
+      // 3. Registrar Log de Auditoria
+      await auditService.logActivity({
+        action: 'DELETE_STORAGE_FILE',
+        entityType: 'storage',
+        entityId: targetFile?.id || fileIdOrUrlOrPath,
+        entityName: targetFile?.name || `${bucket}/${filePath}`,
+        details: {
+          bucket,
+          path: filePath,
+          url: targetFile?.url,
+          fileName: targetFile?.name
+        }
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('Erro ao deletar imagem:', err);
+      return { success: false, error: err?.message || 'Falha ao excluir a imagem.' };
+    }
   }
 };
