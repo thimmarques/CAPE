@@ -329,13 +329,16 @@ CREATE POLICY "Public Write Audit" ON public.audit_logs FOR ALL USING (true);
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
     ('company-assets', 'company-assets', true),
-    ('user-avatars', 'user-avatars', true),
     ('signatures', 'signatures', true),
-    ('reports', 'reports', true)
-ON CONFLICT (id) DO NOTHING;
+    ('reports', 'reports', true),
+    ('user-avatars', 'user-avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 DROP POLICY IF EXISTS "Allow Public Storage Access" ON storage.objects;
-CREATE POLICY "Allow Public Storage Access" ON storage.objects FOR ALL USING (bucket_id IN ('company-assets', 'user-avatars', 'signatures', 'reports'));
+CREATE POLICY "Allow Public Storage Access" ON storage.objects 
+FOR ALL 
+USING (bucket_id IN ('company-assets', 'signatures', 'reports', 'user-avatars'))
+WITH CHECK (bucket_id IN ('company-assets', 'signatures', 'reports', 'user-avatars'));
 
 -- 11. SEED DO SUPER ADMIN MASTER
 INSERT INTO public.user_profiles (
