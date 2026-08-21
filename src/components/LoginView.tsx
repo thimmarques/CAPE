@@ -74,10 +74,28 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md relative z-10 space-y-6">
         
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/50 mb-1">
-            <ShieldCheck size={32} />
+        <div className="text-center space-y-3">
+          <div className="flex justify-center items-center">
+            <img 
+              src="/CAPE_logo_1787309328715.PNG" 
+              alt="CAPE Logo" 
+              className="max-h-20 sm:max-h-24 w-auto max-w-[280px] object-contain drop-shadow-md mx-auto"
+              onError={(e) => {
+                // Fallback to shield icon if image file is not found
+                e.currentTarget.style.display = 'none';
+                const fallback = document.getElementById('login-logo-fallback');
+                if (fallback) fallback.style.display = 'inline-flex';
+              }}
+            />
+            <div 
+              id="login-logo-fallback" 
+              style={{ display: 'none' }}
+              className="items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/50"
+            >
+              <ShieldCheck size={32} />
+            </div>
           </div>
+
           <div className="space-y-0.5">
             <span className="text-[11px] font-bold tracking-wider uppercase text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-0.5 rounded-full inline-block">
               NR-01 & Portaria MTE nº 1.419/2024

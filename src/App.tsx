@@ -182,8 +182,18 @@ export default function App() {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#1A392A] text-white">
         <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
-          <div className="w-16 h-16 bg-[#40916C] rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-xl animate-pulse">
-            P
+          <div className="w-16 h-16 bg-[#2D6A4F]/60 border border-[#40916C]/50 rounded-2xl flex items-center justify-center shadow-xl p-2 relative overflow-hidden">
+            <img 
+              src="/logo_cape_1787309323396.PNG" 
+              alt="Logo CAPE" 
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const p = e.currentTarget.nextElementSibling as HTMLElement;
+                if (p) p.style.display = 'block';
+              }}
+            />
+            <span style={{ display: 'none' }} className="text-white font-black text-3xl">P</span>
           </div>
           <div className="text-center space-y-1">
             <h2 className="text-lg font-bold tracking-tight">PsychoRisk Analytics NR-01</h2>
@@ -233,8 +243,18 @@ export default function App() {
             className="flex items-center gap-3 cursor-pointer select-none" 
             onClick={() => handleNavigate('dashboard')}
           >
-            <div className="w-10 h-10 bg-[#40916C] rounded-xl flex items-center justify-center text-white font-black text-xl shadow-inner">
-              P
+            <div className="w-10 h-10 bg-[#2D6A4F]/60 border border-[#40916C]/50 rounded-xl flex items-center justify-center shadow-inner shrink-0 p-1 relative overflow-hidden">
+              <img 
+                src="/logo_cape_1787309323396.PNG" 
+                alt="Logo CAPE" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const p = e.currentTarget.nextElementSibling as HTMLElement;
+                  if (p) p.style.display = 'block';
+                }}
+              />
+              <span style={{ display: 'none' }} className="text-white font-black text-xl">P</span>
             </div>
             <div className="flex flex-col">
               <span className="text-white font-black text-base tracking-tight leading-none">PsychoRisk</span>
