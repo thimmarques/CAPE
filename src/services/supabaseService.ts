@@ -777,7 +777,11 @@ export const dbService = {
           });
 
         if (error) {
-          console.warn(`Erro no upload para o Supabase Storage (${bucket}):`, error.message);
+          console.error(`Erro no upload para o Supabase Storage (${bucket}):`, error.message);
+          return {
+            publicUrl: null,
+            error: `Erro no Supabase Storage: "${error.message}". Verifique se o bucket "${bucket}" foi criado e configurado como PÚBLICO (Public Bucket) no menu Storage do Supabase.`
+          };
         } else if (data?.path) {
           const { data: { publicUrl } } = client.storage.from(bucket).getPublicUrl(data.path);
           
