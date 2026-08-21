@@ -248,6 +248,8 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'consultant', 'evaluator')),
     avatar_url TEXT,
+    is_blocked BOOLEAN DEFAULT FALSE,
+    provider TEXT DEFAULT 'email',
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );

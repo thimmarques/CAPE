@@ -119,6 +119,16 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ currentUser, onNav
         return { bg: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Upload Storage' };
       case 'UPDATE_PROFILE':
         return { bg: 'bg-cyan-50 text-cyan-700 border-cyan-200', label: 'Perfil Atualizado' };
+      case 'CREATE_USER':
+        return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Novo Membro' };
+      case 'UPDATE_USER':
+        return { bg: 'bg-sky-50 text-sky-700 border-sky-200', label: 'Função Alterada' };
+      case 'DELETE_USER':
+        return { bg: 'bg-rose-50 text-rose-700 border-rose-200', label: 'Membro Excluído' };
+      case 'BLOCK_USER':
+        return { bg: 'bg-red-100 text-red-800 border-red-300', label: 'E-mail Bloqueado' };
+      case 'UNBLOCK_USER':
+        return { bg: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'E-mail Desbloqueado' };
       default:
         return { bg: 'bg-slate-100 text-slate-700 border-slate-200', label: action };
     }

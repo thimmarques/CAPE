@@ -12,6 +12,8 @@ export interface AuthUser {
   isSuperAdmin: boolean;
   provider?: 'email' | 'google';
   createdAt?: string;
+  isBlocked?: boolean;
+  status?: 'active' | 'blocked';
 }
 
 export const SUPER_ADMIN_EMAIL = 'thibasss@gmail.com';
@@ -311,7 +313,11 @@ export type AuditAction =
   | 'GENERATE_REPORT'
   | 'EXPORT_REPORT_PDF'
   | 'UPDATE_PROFILE'
+  | 'CREATE_USER'
   | 'UPDATE_USER'
+  | 'DELETE_USER'
+  | 'BLOCK_USER'
+  | 'UNBLOCK_USER'
   | 'UPLOAD_LOGO'
   | 'UPLOAD_AVATAR'
   | 'DELETE_STORAGE_FILE'
