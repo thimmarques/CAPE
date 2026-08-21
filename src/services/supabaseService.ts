@@ -21,24 +21,7 @@ const LOCAL_STORAGE_KEYS = {
   STORAGE_FILES: 'psychorisk_storage_files_v1',
 };
 
-const DEFAULT_STORAGE_FILES: StoredFileItem[] = [
-  {
-    id: 'file-default-logo-1',
-    bucket: 'company-assets',
-    name: 'Logo Consultoria SST (Padrão)',
-    url: 'https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=400&auto=format&fit=crop&q=80',
-    path: 'default_consultancy_logo.png',
-    createdAt: '2025-01-10T10:00:00.000Z',
-  },
-  {
-    id: 'file-default-sig-1',
-    bucket: 'signatures',
-    name: 'Assinatura Técnica Digitalizada',
-    url: 'https://api.dicebear.com/7.x/initials/svg?seed=Assinatura+Tecnica',
-    path: 'default_signature.svg',
-    createdAt: '2025-01-15T14:30:00.000Z',
-  }
-];
+const DEFAULT_STORAGE_FILES: StoredFileItem[] = [];
 
 export const getLocalStoredFiles = (): StoredFileItem[] => {
   try {
@@ -47,7 +30,7 @@ export const getLocalStoredFiles = (): StoredFileItem[] => {
   } catch (e) {
     console.error('Erro ao ler arquivos do localStorage:', e);
   }
-  return DEFAULT_STORAGE_FILES;
+  return [];
 };
 
 export const setLocalStoredFiles = (files: StoredFileItem[]): void => {
@@ -749,6 +732,62 @@ export const dbService = {
 
   // STORAGE / UPLOAD & EXCLUSÃO DE ARQUIVOS (LOGOS, ASSINATURAS, DOCUMENTOS)
   async listUploadedFiles(bucket?: StorageBucketName): Promise<StoredFileItem[]> {
+    const client = getSupabaseClient();
+
+    if (client && isSupabaseConfigured()) {
+      try {
+        const bucketsToList: StorageBucketName[] = bucket
+          ? [bucket]
+          : ['company-assets', 'signatures', 'reports', 'user-avatars'];
+
+        const cloudItems: StoredFileItem[] = [];
+
+        for (const b of bucketsToList) {
+          try {
+            const { data, error } = await client.storage.from(b).list('', {
+              limit: 100,
+              offset: 0,
+              sortBy: { column: 'created_at', order: 'desc' }
+            });
+
+            if (error) {
+              console.warn(`Aviso ao listar bucket "${b}" no Supabase Storage:`, error.message);
+              continue;
+            }
+
+            if (data && data.length > 0) {
+              for (const item of data) {
+                // Ignora pastas vazias ou arquivos ocultos
+                if (!item.name || item.name === '.emptyFolderPlaceholder') continue;
+
+                const { data: urlData } = client.storage.from(b).getPublicUrl(item.name);
+                
+                cloudItems.push({
+                  id: item.id || `supabase-${b}-${item.name}`,
+                  bucket: b,
+                  name: item.name,
+                  url: urlData.publicUrl,
+                  path: item.name,
+                  sizeBytes: item.metadata?.size,
+                  createdAt: item.created_at || new Date().toISOString(),
+                });
+              }
+            }
+          } catch (bucketErr) {
+            console.warn(`Erro ao consultar bucket "${b}":`, bucketErr);
+          }
+        }
+
+        // Salva cache local atualizado com o que está no Supabase
+        if (cloudItems.length > 0 || !bucket) {
+          setLocalStoredFiles(cloudItems);
+          return bucket ? cloudItems.filter(f => f.bucket === bucket) : cloudItems;
+        }
+      } catch (err) {
+        console.error('Erro ao consultar Supabase Storage:', err);
+      }
+    }
+
     const local = getLocalStoredFiles();
     return bucket ? local.filter(f => f.bucket === bucket) : local;
   },

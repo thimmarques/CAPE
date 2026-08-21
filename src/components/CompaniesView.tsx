@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Company, Department, AssessmentCampaign, AssessmentSession } from '../types';
 import { 
   Building2, Plus, Search, Filter, MapPin, Users, Phone, Mail, 
   ExternalLink, Edit3, Trash2, Layers, Briefcase, Calendar, 
   CheckCircle2, X, AlertCircle, ChevronRight, BarChart3, FileText, Play,
-  RefreshCw, ShieldCheck, Clock, Lock
+  RefreshCw, ShieldCheck, Clock, Lock, UploadCloud, Image as ImageIcon
 } from 'lucide-react';
 import { getCompanyAssessmentProgress } from '../utils/assessmentCalculations';
+import { dbService } from '../services/supabaseService';
 
 interface CompaniesViewProps {
   companies: Company[];
@@ -48,9 +49,13 @@ export function CompaniesView({
     rhContactPhone: '',
     employeeCount: 0,
     respondedEmployeeCount: 0,
+    logoUrl: '',
     status: 'active' as 'active' | 'inactive',
     departments: [] as { id: string; name: string; headcount: number; roles: string[] }[]
   });
+
+  const [isUploadingCompanyLogo, setIsUploadingCompanyLogo] = useState(false);
+  const companyLogoInputRef = useRef<HTMLInputElement>(null);
 
   // Structure form state for direct sector adding in modal
   const [newDeptName, setNewDeptName] = useState('');
@@ -91,6 +96,7 @@ export function CompaniesView({
       rhContactPhone: '',
       employeeCount: 0,
       respondedEmployeeCount: 0,
+      logoUrl: '',
       status: 'active',
       departments: []
     });
@@ -115,6 +121,7 @@ export function CompaniesView({
       rhContactPhone: company.rhContactPhone || '',
       employeeCount: company.employeeCount,
       respondedEmployeeCount: company.respondedEmployeeCount ?? company.employeeCount,
+      logoUrl: company.logoUrl || '',
       status: company.status,
       departments: (company.departments || []).map(d => ({
         id: d.id,
@@ -124,6 +131,25 @@ export function CompaniesView({
       }))
     });
     setIsCompanyModalOpen(true);
+  };
+
+  const handleCompanyLogoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCompanyLogo(true);
+    try {
+      const cleanName = `logo_${(formData.tradeName || 'empresa').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
+      const res = await dbService.uploadImage('company-assets', file, cleanName);
+      if (res.publicUrl) {
+        setFormData(prev => ({ ...prev, logoUrl: res.publicUrl! }));
+      }
+    } catch (err) {
+      console.error('Erro ao fazer upload do logo da empresa:', err);
+    } finally {
+      setIsUploadingCompanyLogo(false);
+      if (companyLogoInputRef.current) companyLogoInputRef.current.value = '';
+    }
   };
 
   // Helper to sync total company count with the sum of department headcounts
@@ -202,6 +228,7 @@ export function CompaniesView({
         rhContactPhone: formData.rhContactPhone,
         employeeCount: formData.employeeCount,
         respondedEmployeeCount: effectiveRespondents,
+        logoUrl: formData.logoUrl || undefined,
         status: formData.status,
         departments: deptsToSave
       };
@@ -226,6 +253,7 @@ export function CompaniesView({
         rhContactPhone: formData.rhContactPhone,
         employeeCount: formData.employeeCount,
         respondedEmployeeCount: effectiveRespondents,
+        logoUrl: formData.logoUrl || undefined,
         status: formData.status,
         departments: deptsToSave.map(d => ({ ...d, companyId: newCompanyId })),
         campaigns: [
@@ -548,6 +576,71 @@ export function CompaniesView({
                       onChange={(e) => setFormData({...formData, city: e.target.value})}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#2D6A4F] outline-none"
                     />
+                  </div>
+                </div>
+
+                {/* Logotipo da Empresa */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <ImageIcon size={14} className="text-[#2D6A4F]" />
+                      Logotipo da Empresa (Aparece no Laudo Técnico)
+                    </span>
+                    {formData.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, logoUrl: '' }))}
+                        className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1 hover:underline"
+                      >
+                        <Trash2 size={12} />
+                        <span>Remover Logo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {formData.logoUrl ? (
+                      <img 
+                        src={formData.logoUrl} 
+                        alt="Logo Empresa" 
+                        className="w-12 h-12 object-contain bg-white rounded-lg border border-slate-200 p-1 shrink-0" 
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                        <Building2 size={20} />
+                      </div>
+                    )}
+
+                    <div className="flex-1">
+                      <input 
+                        type="file" 
+                        ref={companyLogoInputRef}
+                        onChange={handleCompanyLogoSelect}
+                        accept="image/*"
+                        className="hidden" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => companyLogoInputRef.current?.click()}
+                        disabled={isUploadingCompanyLogo}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-300 rounded-lg transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                      >
+                        {isUploadingCompanyLogo ? (
+                          <>
+                            <RefreshCw size={13} className="animate-spin text-[#2D6A4F]" />
+                            <span>Enviando para o Supabase...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud size={13} className="text-[#2D6A4F]" />
+                            <span>{formData.logoUrl ? 'Trocar Logotipo' : 'Fazer Upload do Logotipo'}</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="text-[10px] text-slate-400 mt-1 font-mono truncate">
+                        {formData.logoUrl || 'PNG, JPG ou SVG (salvo diretamente no Supabase Storage)'}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -45,6 +45,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Gallery of Stored Files
   const [storedFiles, setStoredFiles] = useState<StoredFileItem[]>(getLocalStoredFiles);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
   const [galleryFilterBucket, setGalleryFilterBucket] = useState<string>('ALL');
   const [gallerySearch, setGallerySearch] = useState<string>('');
   const [previewModalFile, setPreviewModalFile] = useState<StoredFileItem | null>(null);
@@ -54,17 +55,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Carrega arquivos do serviço
   const loadStoredFiles = async () => {
+    setIsLoadingFiles(true);
     try {
       const files = await dbService.listUploadedFiles();
       setStoredFiles(files);
     } catch (e) {
       console.error('Erro ao listar arquivos do storage:', e);
+    } finally {
+      setIsLoadingFiles(false);
     }
   };
 
   useEffect(() => {
     loadStoredFiles();
-  }, []);
+  }, [activeTab]);
 
   // Handlers do Perfil
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -900,6 +904,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Filtros e Busca */}
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadStoredFiles}
+                  disabled={isLoadingFiles}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  title="Atualizar lista com o Supabase Storage em tempo real"
+                >
+                  <RefreshCw size={13} className={isLoadingFiles ? 'animate-spin text-emerald-600' : 'text-slate-500'} />
+                  <span>{isLoadingFiles ? 'Atualizando...' : 'Atualizar'}</span>
+                </button>
+
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -907,7 +922,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     value={gallerySearch}
                     onChange={(e) => setGallerySearch(e.target.value)}
                     placeholder="Filtrar imagens..."
-                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none w-44 sm:w-56"
+                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none w-40 sm:w-52"
                   />
                 </div>
 
@@ -925,7 +940,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             {/* Grid de Cards de Imagens */}
-            {filteredFiles.length === 0 ? (
+            {isLoadingFiles ? (
+              <div className="p-12 text-center text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-3">
+                <RefreshCw size={28} className="mx-auto text-emerald-600 animate-spin" />
+                <p className="text-xs font-bold text-slate-700">Carregando arquivos do Supabase Storage...</p>
+                <p className="text-[11px] text-slate-400">Consultando os buckets públicos em tempo real.</p>
+              </div>
+            ) : filteredFiles.length === 0 ? (
               <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
                 <ImageIcon size={32} className="mx-auto text-slate-300" />
                 <p className="text-xs font-semibold text-slate-600">Nenhuma imagem encontrada nesta categoria.</p>

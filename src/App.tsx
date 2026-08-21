@@ -55,6 +55,7 @@ export default function App() {
         console.error('Erro ao restaurar sessão de usuário:', e);
       } finally {
         setIsAuthLoading(false);
+        loadCloudData();
       }
     };
 
