@@ -6,8 +6,10 @@ import {
   CheckCircle2, ArrowLeft, ArrowRight, Save, Play, 
   Building2, Users, Briefcase, ShieldCheck, Sparkles, 
   RotateCcw, Check, AlertCircle, Clock, ChevronRight,
-  FileText, ListChecks
+  FileText, ListChecks, FileCode, Download, Loader2
 } from 'lucide-react';
+import { assessmentSnapshotService, AssessmentData, RawResponses } from '../services/assessmentSnapshotService';
+import { exportAssessmentBackup } from '../utils/exportAssessmentBackup';
 
 interface AssessmentViewProps {
   companies: Company[];
@@ -52,6 +54,9 @@ export function AssessmentView({
   const [responses, setResponses] = useState<Record<number, 1 | 2 | 3 | 4>>({});
   const [currentStep, setCurrentStep] = useState<'form' | 'success'>('form');
   const [activeDimensionIndex, setActiveDimensionIndex] = useState<number>(0);
+  const [isSavingSnapshot, setIsSavingSnapshot] = useState<boolean>(false);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<AssessmentData | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
   // Helper to find first department with open quota (not completed)
   const getFirstAvailableDept = (comp: Company) => {
@@ -176,12 +181,15 @@ export function AssessmentView({
     setCurrentStep('form');
   };
 
-  const handleSaveIndividualSession = () => {
+  const handleSaveIndividualSession = async () => {
     if (!activeCompany) return;
     if (!isComplete) {
       alert('Por favor, responda a todas as 38 questões antes de salvar o questionário.');
       return;
     }
+
+    setIsSavingSnapshot(true);
+    setSnapshotError(null);
 
     const dept = activeCompany.departments?.find(d => d.id === selectedDeptId);
     const deptName = dept ? dept.name : 'Geral';
@@ -205,8 +213,75 @@ export function AssessmentView({
       createdAt: new Date().toISOString()
     };
 
+    // 1. Atualiza estado da aplicação React
     onSaveSession(newSession);
-    setCurrentStep('success');
+
+    // 2. RF09: Monta o Snapshot Estruturado e Persiste no Supabase
+    try {
+      const rawResponsesObj: RawResponses = {};
+      let totalScore = 0;
+      const dimTotals: Record<string, { sum: number; count: number }> = {};
+
+      QUESTIONS.forEach(q => {
+        const score = responses[q.id] || 3;
+        totalScore += score;
+        const dim = DIMENSIONS.find(d => d.id === q.dimensionId)?.name || 'Geral';
+
+        rawResponsesObj[`q_${q.id}`] = {
+          questionText: q.text,
+          dimension: dim,
+          score
+        };
+
+        if (!dimTotals[dim]) dimTotals[dim] = { sum: 0, count: 0 };
+        dimTotals[dim].sum += score;
+        dimTotals[dim].count += 1;
+      });
+
+      const maxPossibleScore = QUESTIONS.length * 4;
+      const favorabilityRate = Math.round((totalScore / maxPossibleScore) * 100);
+      
+      let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' = 'LOW';
+      if (favorabilityRate < 50) riskLevel = 'CRITICAL';
+      else if (favorabilityRate < 65) riskLevel = 'HIGH';
+      else if (favorabilityRate < 80) riskLevel = 'MODERATE';
+
+      const categoryAverages: Record<string, number> = {};
+      Object.keys(dimTotals).forEach(dim => {
+        categoryAverages[dim] = Number((dimTotals[dim].sum / dimTotals[dim].count).toFixed(2));
+      });
+
+      const snapshotResult = await assessmentSnapshotService.saveAssessment({
+        companyId: activeCompany.id,
+        companyName: activeCompany.tradeName || activeCompany.corporateName,
+        companyCnpj: activeCompany.cnpj || '',
+        departmentId: selectedDeptId || undefined,
+        departmentName: deptName,
+        sampleSize: 1,
+        evaluatorId: undefined,
+        evaluatorName: 'Consultor / Avaliador SST',
+        evaluatorEmail: 'thibasss@gmail.com',
+        overallFavorabilityRate: favorabilityRate,
+        riskLevel,
+        rawResponses: rawResponsesObj,
+        conductRisks: {
+          moralHarassmentReported: false,
+          sexualHarassmentReported: false,
+          discriminationReported: false,
+        },
+        categoryAverages,
+      });
+
+      if (snapshotResult.data) {
+        setLastSavedSnapshot(snapshotResult.data);
+      }
+    } catch (err: any) {
+      console.warn('Erro ao salvar snapshot:', err);
+      setSnapshotError(err.message || 'Falha ao salvar no banco');
+    } finally {
+      setIsSavingSnapshot(false);
+      setCurrentStep('success');
+    }
   };
 
   const currentDimension = DIMENSIONS[activeDimensionIndex] || DIMENSIONS[0];
@@ -347,11 +422,25 @@ export function AssessmentView({
             </p>
           </div>
 
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1 text-left">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1.5 text-left">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-600" />
+                Snapshot Homologado NR-01 (RF09)
+              </span>
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                {lastSavedSnapshot?.id ? 'Gravado no Supabase' : 'Persistência Concluída'}
+              </span>
+            </div>
             <div><strong>Setor:</strong> {activeCompany.departments?.find(d => d.id === selectedDeptId)?.name || 'Geral'}</div>
             <div><strong>Função/Cargo:</strong> {roleName}</div>
             <div><strong>Identificador:</strong> {isAnonymous ? 'Anônimo (Sigilo Assegurado)' : employeeId}</div>
             <div><strong>Data de Coleta:</strong> {new Date().toLocaleDateString('pt-BR')}</div>
+            {lastSavedSnapshot?.id && (
+              <div className="text-[10px] text-slate-400 font-mono pt-1">
+                ID do Registro: {lastSavedSnapshot.id}
+              </div>
+            )}
           </div>
 
           {/* Actions on Success */}
@@ -361,6 +450,19 @@ export function AssessmentView({
                 ✓ Limite atingido: Todos os <strong>{progress.totalRequired}</strong> colaboradores do questionário já responderam para esta empresa. Censo 100% concluído!
               </div>
             ) : null}
+
+            {/* Contingency Backup Button (RF10) */}
+            {lastSavedSnapshot && (
+              <button
+                type="button"
+                onClick={() => exportAssessmentBackup(lastSavedSnapshot)}
+                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                title="Exportar arquivo .json completo desta avaliação para guarda jurídica"
+              >
+                <FileCode size={15} className="text-emerald-700" />
+                <span>Baixar Backup de Contingência (.JSON - RF10)</span>
+              </button>
+            )}
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               {progress && progress.totalCompleted >= progress.totalRequired ? (

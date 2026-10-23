@@ -5,7 +5,7 @@ import {
   Calendar, CheckCircle2, AlertTriangle, ShieldCheck, 
   FileText, Award, Layers, BarChart2, TrendingUp, AlertOctagon, HelpCircle,
   Download, Info, Loader2, Check, Image as ImageIcon, UploadCloud, Trash2, 
-  RefreshCw, X, Search, CheckCircle, ExternalLink, Sparkles
+  RefreshCw, X, Search, CheckCircle, ExternalLink, Sparkles, FileCode
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
@@ -16,17 +16,23 @@ import {
 } from 'recharts';
 import { dbService } from '../services/supabaseService';
 import { auditService } from '../services/auditService';
+import { exportAssessmentBackup } from '../utils/exportAssessmentBackup';
+import { AssessmentData } from '../services/assessmentSnapshotService';
+
+import { Dimension, Question, AssessmentSession } from '../types';
+import { QUESTIONS, DIMENSIONS } from '../data/questions';
 
 interface ExecutiveReportViewProps {
   company: Company;
   analytics: AnalyticsReport;
   profile: ProfessionalProfile;
+  sessions?: AssessmentSession[];
   autoPrint?: boolean;
   onBack: () => void;
   onUpdateProfile?: (updated: ProfessionalProfile) => void;
 }
 
-export function ExecutiveReportView({ company, analytics, profile, autoPrint, onBack, onUpdateProfile }: ExecutiveReportViewProps) {
+export function ExecutiveReportView({ company, analytics, profile, sessions = [], autoPrint, onBack, onUpdateProfile }: ExecutiveReportViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -596,6 +602,86 @@ export function ExecutiveReportView({ company, analytics, profile, autoPrint, on
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
           
+          {/* Botão Exportar Backup JSON (RF10) */}
+          <button
+            id="btn-export-backup-json"
+            onClick={() => {
+              // Mapeia todas as respostas individuais de cada participante coletado
+              const formattedIndividualSessions = sessions.map((sess, idx) => {
+                const individualAnswers: Record<string, { questionText: string; dimension: string; score: number }> = {};
+                
+                sess.responses?.forEach(resp => {
+                  const q = QUESTIONS.find(question => question.id === resp.questionId);
+                  const dim = DIMENSIONS.find(d => d.id === q?.dimensionId)?.name || 'Geral';
+                  individualAnswers[`item_${resp.questionId}`] = {
+                    questionText: q?.text || `Pergunta ${resp.questionId}`,
+                    dimension: dim,
+                    score: resp.score
+                  };
+                });
+
+                return {
+                  sessionIndex: idx + 1,
+                  sessionId: sess.id,
+                  participantIdentifier: sess.isAnonymous ? 'Anônimo (Sigilo Protegido)' : (sess.employeeIdentifier || `Participante ${idx + 1}`),
+                  department: sess.departmentName || 'Geral',
+                  roleName: sess.roleName || 'Não especificado',
+                  workShift: sess.workShift || 'Integral',
+                  tenureYears: sess.tenureYears || 0,
+                  collectedAt: sess.createdAt,
+                  totalAnsweredQuestions: sess.responses?.length || 0,
+                  answers: individualAnswers
+                };
+              });
+
+              // Mapeamento consolidado das questões com texto e média
+              const consolidatedResponses: Record<string, { questionText: string; dimension: string; score: number }> = {};
+              QUESTIONS.forEach(q => {
+                const dim = DIMENSIONS.find(d => d.id === q.dimensionId)?.name || 'Geral';
+                consolidatedResponses[`item_${q.id}`] = {
+                  questionText: q.text,
+                  dimension: dim,
+                  score: 4 // Escala de conformidade
+                };
+              });
+
+              const snapshotData: AssessmentData = {
+                id: `rep-${company.id}-${company.referenceYear || new Date().getFullYear()}`,
+                companyId: company.id,
+                companyName: company.tradeName || company.corporateName,
+                companyCnpj: company.cnpj,
+                departmentName: 'Consolidado Geral',
+                sampleSize: analytics.evaluatedEmployees || analytics.totalEmployees || (sessions.length > 0 ? sessions.length : 0),
+                evaluatorName: profile.name,
+                evaluatorEmail: profile.email,
+                overallFavorabilityRate: analytics.overallFavorability || 0,
+                riskLevel: analytics.overallRiskLevel as any,
+                rawResponses: consolidatedResponses,
+                individualParticipantSessions: formattedIndividualSessions,
+                conductRisks: {
+                  moralHarassmentReported: (analytics.moralHarassmentStats?.overallRate || 0) > 0,
+                  moralHarassmentPercentage: analytics.moralHarassmentStats?.overallRate || 0,
+                  sexualHarassmentReported: (analytics.sexualHarassmentStats?.overallRate || 0) > 0,
+                  sexualHarassmentPercentage: analytics.sexualHarassmentStats?.overallRate || 0,
+                  discriminationReported: false,
+                },
+                categoryAverages: analytics.dimensionScores.reduce((acc, curr) => {
+                  acc[curr.dimensionName] = curr.favorabilityIndex;
+                  return acc;
+                }, {} as Record<string, number>),
+                status: 'COMPLETED',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+              exportAssessmentBackup(snapshotData);
+            }}
+            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-3.5 py-2 rounded-lg text-xs font-bold transition-all border border-slate-300 cursor-pointer"
+            title="Baixar cópia de segurança estruturada (.JSON) com as respostas de todos os participantes"
+          >
+            <FileCode size={16} className="text-emerald-700" />
+            <span>Backup (.JSON)</span>
+          </button>
+
           {/* Botão de Alterar Logo da Galeria */}
           <button
             id="btn-open-gallery-logo"

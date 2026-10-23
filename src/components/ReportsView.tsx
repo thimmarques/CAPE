@@ -66,6 +66,7 @@ export function ReportsView({ companies, sessions = [], profile, selectedCompany
         company={viewingReportCompany}
         analytics={liveAnalytics}
         profile={profile}
+        sessions={sessions.filter(s => s.companyId === viewingReportCompany.id)}
         autoPrint={autoPrintReport}
         onUpdateProfile={onUpdateProfile}
         onBack={() => {
